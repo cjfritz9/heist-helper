@@ -1,11 +1,11 @@
 local coords = require("core.coords")
 local picking = require("core.picking")
+local signature = require("game.signature")
 
 local M = {}
 
 local PICK_RADIUS_TILES = 20
 local MAX_SAMPLES = 256
-local FINGERPRINT_VERTICES = 16
 local UV_PRECISION = 4096
 
 local pending = nil
@@ -42,7 +42,7 @@ function M.inspect(bolt, event)
   local sampled = {}
   for i = 1, count, picking.stride(count, MAX_SAMPLES) do
     local modelPoint = event:vertexpoint(i)
-    local sx, sy, depth = modelPoint:transform(model):transform(viewProj):toscreen()
+    local sx, sy, depth = event:vertexpointscaled(i):transform(model):transform(viewProj):toscreen()
     if onScreen(depth) then
       picking.extend(box, sx, sy)
     end
@@ -57,10 +57,6 @@ function M.inspect(bolt, event)
     uvPoints[n] = { u * UV_PRECISION, v * UV_PRECISION }
   end
 
-  local shape = {}
-  for i = 1, math.min(count, FINGERPRINT_VERTICES) do
-    shape[i] = { event:vertexpoint(i):get() }
-  end
 
   pending.candidates[#pending.candidates + 1] = {
     vertices = count,
@@ -70,7 +66,9 @@ function M.inspect(bolt, event)
     tileZ = origin.tileZ,
     originY = oy,
     box = box,
-    fingerprint = picking.fingerprint(shape),
+    fingerprint = signature.fingerprint(event, count),
+    colour = signature.colour(event, count),
+    textureHash = signature.texture(event, count),
     shape = picking.fingerprint(shapePoints),
     uv = picking.fingerprint(uvPoints),
   }

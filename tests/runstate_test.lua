@@ -107,4 +107,24 @@ function T.rummage_counts_survive_a_restart_and_reset_with_the_run()
   assert.eq(runstate.rummageCount(decoded, 8, 4), 0, "reset")
 end
 
+function T.looted_objects_and_powered_anchors_persist()
+  local state = anchored()
+  assert.eq(runstate.markObjectLooted(state, "chest", 11, -4), true, "new")
+  assert.eq(runstate.markObjectLooted(state, "chest", 11, -4), false, "already")
+  assert.eq(runstate.toggleAnchor(state, -8, -63), true, "powered")
+  local decoded = runstate.decode(runstate.encode(state))
+  assert.eq(runstate.isObjectLooted(decoded, "chest", 11, -4), true, "chest restored")
+  assert.eq(runstate.isAnchorPowered(decoded, -8, -63), true, "anchor restored")
+  assert.eq(runstate.toggleAnchor(decoded, -8, -63), false, "toggled off")
+  runstate.resetRun(state)
+  assert.eq(runstate.isObjectLooted(state, "chest", 11, -4), false, "reset")
+end
+
+function T.set_anchor_powered_only_once()
+  local state = anchored()
+  assert.eq(runstate.setAnchorPowered(state, -8, -63), true, "first")
+  assert.eq(runstate.setAnchorPowered(state, -8, -63), false, "already")
+  assert.eq(runstate.isAnchorPowered(state, -8, -63), true, "powered")
+end
+
 return T

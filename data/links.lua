@@ -1,0 +1,17 @@
+return {
+  { anchorDx = 5, anchorDz = -25, objectDx = -5, objectDz = -16,
+    before = "3444:9f69f595:0:97eb6405:bd02db92",
+    after = "3444:9f69f595:0:97eb6405:7f47337c" },
+  { anchorDx = -14, anchorDz = -30, objectDx = -17, objectDz = -26,
+    before = "3444:9f69f595:0:97eb6405:bd02db92",
+    after = "3444:9f69f595:0:97eb6405:7f47337c" },
+  { anchorDx = -14, anchorDz = -80, objectDx = -20, objectDz = -81,
+    before = "3444:9f69f595:0:97eb6405:bd02db92",
+    after = "3444:9f69f595:0:97eb6405:7f47337c" },
+  { anchorDx = -8, anchorDz = -63, objectDx = 16, objectDz = -68,
+    before = "3444:9f69f595:0:97eb6405:bd02db92",
+    after = "3444:9f69f595:0:97eb6405:7f47337c" },
+  { anchorDx = 13, anchorDz = -84, objectDx = 15, objectDz = -73,
+    before = "3444:9f69f595:0:97eb6405:bd02db92",
+    after = "3444:9f69f595:0:97eb6405:7f47337c" },
+}

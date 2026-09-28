@@ -1,10 +1,13 @@
-# Vault of Hereditas (Bolt plugin)
+# Heist Helper (Bolt plugin)
 
 A display-only Bolt plugin for the Vault of Hereditas heist. The design, feature list and compliance rules are in [the design report](../research/reports/vault-of-hereditas-plugin.md).
 
 ## Status
 
-**Object highlighting (0.7.0).** Inside the vault, every unlooted chest, safe, rare chest and corpse gets an outline around its model: yellow for chests (shadow chests use the same model), cyan for safes, magenta for the rare chest, orange for corpses. An outline disappears once the object is looted:
+The plugin only runs inside the Vault of Hereditas. Outside it the panel is hidden and nothing is drawn or read. It wakes up when you teleport in, or when it recognises a vault object after a restart mid-run.
+
+
+**Object highlighting (0.7.0).** Inside the vault, every unlooted chest, safe, rare chest and corpse gets an outline around its model: yellow for chests (shadow chests use the same model; grey while a shadow chest is still locked), cyan for safes, magenta for the rare chest, orange for corpses, and purple for shadow dials until you use them. The teleport marks the dial you used and its partner at the landing spot. Outlines are 4 px thick. An outline disappears once the object is looted:
 
 | Object | How the plugin knows it's looted |
 |---|---|
@@ -21,11 +24,25 @@ The anchor and the looted corpses are saved to `run.csv`, so restarting the plug
 
 Chat needs **timestamps turned on**, and the chat box must be visible and scrolled to the bottom.
 
+### Panel
+
+A small panel sits over the game. Drag it by its title bar, and collapse it to an **H** tab with ▾. Click the tab to reopen it, or drag it to move it.
+
+- **Status:** whether you're in the vault, the current section, chests, safes, corpses and rare chest left, rummage progress for corpses you've started, and shadow anchors powered.
+- **Powered ⇄:** marks the shadow anchor next to you as powered, or back to unpowered. Bolt can't see an anchor's powered state, so this is manual. Linked anchors are outlined in teal until their linked object changes. Unlinked anchors aren't outlined (`OUTLINE_UNLINKED_ANCHORS` in `main.lua`).
+- **dev** shows developer tools:
+  - **Tag object**, then middle-click an object (no modifier keys) to tag it
+  - **Mark tile** and **Log tile**
+  - the top 3 models from the last tag, with buttons to add the selected one to the catalogue. Added models go to `catalog.csv` and are recognised straight away.
+  - **Before / after check:** tag an object, **Set as before**, change its state, tag it again, **Set as after**. The panel lists every value Bolt reports for both and highlights what changed.
+  - **Watch object:** choose a centre (**Watch selected** or **Watch my tile**) and size the area with **−/+** (shown as a green square). Let it learn the background, **Open window**, trigger the change, then **Close window**. The panel lists everything on or next to it that appears or disappears, including one-frame flickers. In link step 3, **Use as after** turns a watched flicker into the link's trigger.
+  - **Link an anchor:** a 3-step flow that ties a shadow anchor to the object it controls. Tag the unpowered anchor, tag the object, power the anchor, tag the object again, then save. After that the anchor is marked powered automatically when its object changes. Links are saved to `links.csv`.
+
 ### Controls
 
 | Input | Action | Flash |
 |---|---|---|
-| **Alt + Middle Click** | Toggle a marker on the tile you're standing on: removes it if there is one, adds one if not. Takes effect immediately | White = added, orange = removed |
+| **Alt + Middle Click** | *(off while tile markers are disabled)* Toggle a marker on the tile you're standing on | White = added, orange = removed |
 | **Shift + Middle Click** | Log your tile to `positions.csv` for mapping | Green |
 | **Ctrl + Middle Click** on an object | Tag it: records the 3D models under the cursor (up to 8, smallest first) to `tags.csv`, with vertex count, animation flag, tile, on-screen size, shape and texture hashes, and the time of the latest chat line | Cyan = tagged, red = nothing found |
 | *(automatic)* | While you're in the vault, new chat lines are appended to `chat.log`. **Needs chat timestamps turned on**, and the chat box must be visible and not scrolled up | None |
@@ -47,10 +64,24 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `core/anchor.lua` | Finds each run's arrival tile from arrival or from a recognised object; vault bounds |
 | `core/runstate.lua` | Current anchor, looted corpses, chat events that change them; saved to `run.csv` |
 | `core/objectmap.lua` | Object positions relative to the arrival tile; seeded from `data/objects.lua` |
-| `core/probediff.lua` | Set differences and log lines for the shadow anchor probe |
-| `game/probe.lua` | Records models, particles and billboards around a nearby shadow anchor and logs what changes |
+| `core/probediff.lua` | Set differences and timestamped log lines, used by the recorder |
+| `game/recorder.lua` | Automatic recording around unlinked shadow anchors into `record.log` |
+| `core/recording.lua` | When the recorder starts and stops, and its snapshot format |
+| `core/links.lua` | Anchor → object links, and the rules that decide when an anchor counts as powered |
+| `core/linkwizard.lua` | The 3-step anchor link flow |
+| `game/signature.lua` | Model identity (vertex count, fingerprint, animation flag, colour hash), shared by tagging and scanning |
+| `core/compare.lua` | Field-by-field comparison for the before / after check |
+| `core/nearby.lua` | Nearest object of a kind, and teleport detection |
+| `core/watchlog.lua` | Baseline and change tracking for Watch object |
+| `game/watch.lua` | Records models, particles and billboards around the watched tile |
+| `gfx/area.lua` | Draws the Watch object area on the ground |
+| `core/json.lua` | Minimal JSON encoder for panel status messages |
+| `core/status.lua` | Builds the panel's status (section, what's left, progress) |
+| `game/panel.lua` | Opens the panel or tab, remembers its position, passes button presses to their actions |
+| `ui/panel.html`, `ui/tab.html` | The panel and its collapsed tab |
 | `core/pips.lua` | Layout of the rummage-progress pips |
 | `core/hull.lua` | Convex hull used for the model outlines |
+| `data/links.lua` | Bundled anchor → object links, overridden per anchor by `links.csv` |
 | `data/objects.lua` | Object positions measured during the tag runs |
 | `game/objects.lua` | Recognises catalogued models each frame and projects their outline points |
 | `gfx/objects.lua` | Draws the outlines |
@@ -66,6 +97,7 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `mapping/` | Mapping runs: raw logs, cleaned CSVs, plots |
 | `core/rewards.lua` | Bag cap, rare chest halving, XP, common rolls, interpolated rare rates |
 | `data/vault.lua` | Static heist data: sources, penalties, sections, crevice gates, reachability |
+| `tools/simulate.lua` | Runs `main.lua` against a fake Bolt through a scripted scenario (`luajit tools/simulate.lua`) |
 | `tests/` | Plain-Lua test runner and suites; no Bolt needed |
 
 Everything under `core/` and `data/` is pure Lua with no dependency on Bolt, so it runs and tests outside the game. `gfx/` and `main.lua` need Bolt.
@@ -92,7 +124,7 @@ Run the tests from this folder. Bolt runs plugins on LuaJIT (Lua 5.1), so avoid 
 1. Download https://bolt.adamcake.com/Bolt-Windows.zip (v0.24.0 at the time of writing), extract it to its own folder, and run `bolt.exe`. It's unsigned, so Windows SmartScreen may warn you.
 2. Log in with your Jagex account from Bolt's Log In button.
 3. Turn on the plugin loader in Bolt's RS3 settings.
-4. Add a local plugin and pick this folder's `bolt.json`. In the Windows file picker it's under `\\wsl.localhost\<distro>\<path to>\vault-of-hereditas` (run `wslpath -w .` in this folder to get the exact path).
+4. Add a local plugin and pick this folder's `bolt.json`. In the Windows file picker it's under `\\wsl.localhost\<distro>\<path to>\heist-helper` (run `wslpath -w .` in this folder to get the exact path).
 5. Launch RS3 from Bolt. **Don't use the in-game Vulkan beta renderer**: Bolt's plugins only hook OpenGL and won't load under Vulkan.
 
 Shift + Middle Click flashes a **green square** in the top-left corner when a tile is logged, or a **red square** when the player's position isn't known yet (walk a tile and retry). `print` output isn't visible on Windows, so the flash is the only feedback.

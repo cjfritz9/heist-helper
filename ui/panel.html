@@ -1,0 +1,323 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #1b1712; --panel: #241e17; --line: #4a3d2c; --gold: #e8c872; --text: #e9e2d4; --muted: #a39680;
+    --chest: #ffd700; --safe: #00c8ff; --corpse: #ff8c00; --anchor: #00e6aa; --rare: #ff3cdc;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow-x: hidden;
+    font: 12px/1.35 "Segoe UI", sans-serif; user-select: none; }
+  header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: var(--panel);
+    border-bottom: 1px solid var(--line); cursor: move; }
+  header h1 { flex: 1; margin: 0; font-size: 13px; color: var(--gold); }
+  header button { cursor: pointer; }
+  button { background: #2e261c; color: var(--text); border: 1px solid var(--line); border-radius: 3px;
+    padding: 3px 7px; font: inherit; cursor: pointer; }
+  button:hover { background: #3a2f22; }
+  button.on { border-color: var(--gold); color: var(--gold); }
+  section { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
+  .muted { color: var(--muted); }
+  .counts { display: flex; gap: 10px; flex-wrap: wrap; }
+  .counts b { font-weight: 600; }
+  .chest { color: var(--chest); } .safe { color: var(--safe); } .corpse { color: var(--corpse); }
+  .anchor { color: var(--anchor); } .rare { color: var(--rare); }
+  .pips span { display: inline-block; width: 8px; height: 8px; margin-right: 2px; background: #5a4630; }
+  .pips span.done { background: var(--corpse); }
+  .buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .candidate { display: flex; gap: 6px; align-items: center; margin: 2px 0; cursor: pointer; }
+  .candidate input { margin: 0; }
+  code { font: 11px/1 Consolas, monospace; color: var(--gold); }
+  #dev[hidden] { display: none; }
+  .subhead { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); color: var(--gold); }
+  .warn { color: #ff9b6b; }
+  table.compare { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 11px; }
+  table.compare td { padding: 1px 3px; border-bottom: 1px solid #2f271d; }
+  table.compare td:first-child { color: var(--muted); white-space: nowrap; }
+  table.compare tr.diff td { color: #ff9b6b; font-weight: 600; }
+  table.compare code { font-size: 10px; }
+  #compareVerdict { margin-top: 4px; font-weight: 600; }
+  .watchItem { display: flex; gap: 4px; align-items: flex-start; margin: 2px 0; font-size: 11px; }
+  .watchItem .sign { width: 10px; font-weight: 700; }
+  .watchItem .sign.add { color: #7dff9a; } .watchItem .sign.remove { color: #ff9b6b; }
+  .watchItem .text { flex: 1; word-break: break-all; }
+  .watchItem button { padding: 1px 4px; font-size: 10px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header id="drag">
+  <h1>Heist Helper</h1>
+  <button id="devToggle" title="Show developer tools">dev</button>
+  <button id="collapse" title="Collapse to a small tab">▾</button>
+</header>
+
+<section>
+  <div class="row"><span id="anchorState" class="muted">Waiting for vault…</span><span id="section"></span></div>
+  <div class="counts">
+    <span class="chest">Chests <b id="chest">–</b></span>
+    <span class="safe">Safes <b id="safe">–</b></span>
+    <span class="corpse">Corpses <b id="corpse">–</b></span>
+    <span class="rare">Rare <b id="rareChest">–</b></span>
+  </div>
+  <div id="corpseProgress"></div>
+  <div class="row">
+    <span class="anchor">Anchors powered <b id="anchors">–</b></span>
+    <button id="anchorToggle" title="Mark the shadow anchor next to you as powered (or unpowered)">Powered ⇄</button>
+  </div>
+</section>
+
+<section id="dev" hidden>
+  <div class="buttons">
+    <button id="tag" title="Then middle-click an object to tag it">Tag object</button>
+    <button id="markTile" title="Add or remove a tile marker where you stand" hidden>Mark tile</button>
+    <button id="logTile" title="Log the tile you're standing on">Log tile</button>
+  </div>
+  <div id="tagHint" class="muted" hidden>Middle-click an object…</div>
+  <div id="lastTag" class="muted">No tag yet.</div>
+  <div id="candidates"></div>
+  <div class="buttons" id="addButtons" hidden>
+    <button data-kind="corpse" class="corpse">+ corpse</button>
+    <button data-kind="chestClosed" class="chest">+ chest</button>
+    <button data-kind="chestOpen" class="chest">+ chest (open)</button>
+    <button data-kind="safe" class="safe">+ safe</button>
+    <button data-kind="dial">+ dial</button>
+    <button data-kind="anchor" class="anchor">+ anchor</button>
+  </div>
+
+  <div class="subhead">Before / after check</div>
+  <div class="muted">Tag an object, set it as before; change its state, tag it again, set it as after.</div>
+  <div class="buttons">
+    <button id="compareBefore">Set as before</button>
+    <button id="compareAfter">Set as after</button>
+    <button id="compareClear">Clear</button>
+  </div>
+  <table class="compare" id="compareTable" hidden></table>
+  <div id="compareVerdict"></div>
+
+  <div class="subhead">Watch object</div>
+  <div class="muted">Pick a centre, size the area (green square in game), let it learn the background, open the window, trigger the change, close the window.</div>
+  <div class="buttons">
+    <button id="watchStart">Watch selected</button>
+    <button id="watchHere">Watch my tile</button>
+  </div>
+  <div class="row">
+    <span>Area <button id="watchSmaller">−</button> <b id="watchRadius">1</b> <button id="watchBigger">+</button> tiles</span>
+  </div>
+  <div class="buttons">
+    <button id="watchArm" hidden>Open window</button>
+    <button id="watchClose" hidden>Close window</button>
+    <button id="watchClear">Clear</button>
+  </div>
+  <div id="watchState" class="muted"></div>
+  <div id="watchItems"></div>
+
+  <div class="subhead">Anchor links <span id="linkCount" class="muted"></span></div>
+  <div id="linkIdle" class="buttons"><button id="linkStart" class="anchor">Link an anchor</button></div>
+  <div id="linkSteps" hidden>
+    <div id="linkInstruction"></div>
+    <div id="linkMessage" class="warn"></div>
+    <div class="buttons" id="linkButtons"></div>
+  </div>
+</section>
+
+<script>
+  const send = (message) => fetch("https://bolt-api/send-message", { method: "POST", body: message });
+  const byId = (id) => document.getElementById(id);
+  const KIND_LABELS = {
+    chest: "chest", safe: "safe", corpse: "corpse", rareChest: "rare chest",
+    shadowAnchor: "shadow anchor", shadowDial: "shadow dial",
+  };
+  let selectedRank = 1;
+  let lastTagNumber = null;
+
+  byId("drag").addEventListener("mousedown", (event) => {
+    if (event.target.closest("button")) return;
+    fetch("https://bolt-api/start-reposition?h=0&v=0");
+  });
+  byId("collapse").addEventListener("click", () => send("collapse"));
+  byId("devToggle").addEventListener("click", () => send("dev"));
+  byId("anchorToggle").addEventListener("click", () => send("anchor"));
+  byId("tag").addEventListener("click", () => send("tag"));
+  byId("markTile").addEventListener("click", () => send("marktile"));
+  byId("logTile").addEventListener("click", () => send("logtile"));
+  document.querySelectorAll("#addButtons button").forEach((button) => {
+    button.addEventListener("click", () => send(`add:${button.dataset.kind}:${selectedRank}`));
+  });
+
+  byId("linkStart").addEventListener("click", () => send("link:start"));
+  byId("compareBefore").addEventListener("click", () => send(`compare:before:${selectedRank}`));
+  byId("compareAfter").addEventListener("click", () => send(`compare:after:${selectedRank}`));
+  byId("compareClear").addEventListener("click", () => send("compare:clear"));
+  byId("watchStart").addEventListener("click", () => send(`watch:start:${selectedRank}`));
+  byId("watchHere").addEventListener("click", () => send("watch:here"));
+  byId("watchSmaller").addEventListener("click", () => send("watch:radius:-"));
+  byId("watchBigger").addEventListener("click", () => send("watch:radius:+"));
+  byId("watchArm").addEventListener("click", () => send("watch:arm"));
+  byId("watchClose").addEventListener("click", () => send("watch:close"));
+  byId("watchClear").addEventListener("click", () => send("watch:clear"));
+
+  const renderWatch = (watch, linkStep) => {
+    const state = byId("watchState");
+    const list = byId("watchItems");
+    byId("watchRadius").textContent = watch ? watch.radius : 1;
+    const learning = !!(watch && watch.active && watch.baseline);
+    const open = !!(watch && watch.active && !watch.baseline && !watch.closed);
+    byId("watchArm").hidden = !learning;
+    byId("watchClose").hidden = !open;
+    if (!watch || !watch.active) {
+      state.textContent = "";
+      list.innerHTML = "";
+      return;
+    }
+    if (learning) {
+      state.textContent = `Learning the background around ${watch.tile} (${watch.background} things seen). Let it idle, then open the window.`;
+    } else if (open) {
+      state.textContent = `Window open at ${watch.tile}: trigger the change now. ${watch.items.length} change(s) so far.`;
+    } else {
+      state.textContent = `Window closed. ${watch.items.length} change(s) recorded.`;
+    }
+    list.innerHTML = "";
+    for (const item of watch.items) {
+      const row = document.createElement("div");
+      row.className = "watchItem";
+      row.innerHTML = `<span class="sign ${item.change === "+" ? "add" : "remove"}">${item.change}</span>` +
+        `<span class="text">${escapeHtml(item.label)} <span class="muted">(${item.frames} frames, +${item.at}s)</span></span>`;
+      if (item.linkable && linkStep === "after") {
+        const use = document.createElement("button");
+        use.textContent = "Use as after";
+        use.addEventListener("click", () => send(`watch:use:${item.index}`));
+        row.appendChild(use);
+      }
+      list.appendChild(row);
+    }
+  };
+
+  const escapeHtml = (text) => String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+  const renderCompare = (comparison) => {
+    const table = byId("compareTable");
+    if (!comparison) {
+      table.hidden = true;
+      table.innerHTML = "";
+      byId("compareVerdict").textContent = "";
+      return;
+    }
+    table.hidden = false;
+    table.innerHTML = "<tr><td></td><td><b>before</b></td><td><b>after</b></td></tr>" + comparison.rows.map((r) => {
+      const different = r.before !== "" && r.after !== "" && !r.same;
+      return `<tr class="${different ? "diff" : ""}"><td>${escapeHtml(r.label)}</td>` +
+        `<td><code>${escapeHtml(r.before)}</code></td><td><code>${escapeHtml(r.after)}</code></td></tr>`;
+    }).join("");
+    byId("compareVerdict").textContent = comparison.verdict || "";
+  };
+
+  const MODE_TEXT = {
+    change: "changes model when the anchor is powered",
+    appear: "appears when the anchor is powered",
+    disappear: "disappears when the anchor is powered",
+    none: "looks the same before and after, so it can't be detected",
+  };
+
+  const LINK_STEPS = {
+    anchor: {
+      text: "Step 1/3: tag the <b>unpowered</b> shadow anchor, pick it in the list above, then:",
+      buttons: [["Use as anchor", () => `link:anchor:${selectedRank}`]],
+    },
+    before: {
+      text: "Step 2/3: <b>don't power it yet</b>. Tag the object it controls, pick it, then:",
+      buttons: [["Use as before", () => `link:before:${selectedRank}`], ["Not visible yet", () => "link:skip"]],
+    },
+    after: {
+      text: "Step 3/3: <b>power the anchor</b>, tag the same object again, pick it, then:",
+      buttons: [["Use as after", () => `link:after:${selectedRank}`], ["It disappeared", () => "link:gone"]],
+      note: "For a brief flicker: Watch the object before powering, then use a + entry from the watch list.",
+    },
+    review: {
+      text: "",
+      buttons: [["Save link", () => "link:save"]],
+    },
+  };
+
+  const renderLink = (link, count) => {
+    byId("linkCount").textContent = `(${count || 0} saved)`;
+    const active = link && link.step !== "idle";
+    byId("linkIdle").hidden = active;
+    byId("linkSteps").hidden = !active;
+    if (!active) return;
+    const step = LINK_STEPS[link.step];
+    byId("linkInstruction").innerHTML = link.step === "review"
+      ? `Anchor <code>${link.anchor}</code> → object <code>${link.object}</code> ${MODE_TEXT[link.mode] || ""}.`
+      : step.text + (step.note ? `<div class="muted">${step.note}</div>` : "");
+    byId("linkMessage").textContent = link.message || "";
+    const buttons = byId("linkButtons");
+    buttons.innerHTML = "";
+    for (const [label, message] of [...step.buttons, ["Cancel", () => "link:cancel"]]) {
+      const button = document.createElement("button");
+      button.textContent = label;
+      button.addEventListener("click", () => send(message()));
+      buttons.appendChild(button);
+    }
+  };
+
+  const pips = (done, total) =>
+    Array.from({ length: total }, (_, i) => `<span class="${i < done ? "done" : ""}"></span>`).join("");
+
+  const renderCandidates = (tag) => {
+    const list = byId("candidates");
+    if (!tag) {
+      list.innerHTML = "";
+      byId("addButtons").hidden = true;
+      return;
+    }
+    byId("lastTag").textContent = `Tag ${tag.number}: pick the object, then add it.`;
+    if (tag.number !== lastTagNumber) {
+      lastTagNumber = tag.number;
+      selectedRank = 1;
+    }
+    list.innerHTML = tag.candidates.map((c) => `
+      <label class="candidate">
+        <input type="radio" name="candidate" value="${c.rank}" ${c.rank === selectedRank ? "checked" : ""}>
+        <span>${c.vertices} v <code>${c.fingerprint}</code> ${c.w}×${c.h}px${c.animated ? " anim" : ""}
+          ${c.kind ? `<b>${KIND_LABELS[c.kind] || c.kind}</b>` : ""}</span>
+      </label>`).join("");
+    list.querySelectorAll("input").forEach((input) => {
+      input.addEventListener("change", () => {
+        selectedRank = Number(input.value);
+        send(`select:${selectedRank}`);
+      });
+    });
+    byId("addButtons").hidden = false;
+  };
+
+  const render = (s) => {
+    byId("anchorState").textContent = s.anchored ? "In vault ✓" : "Waiting for vault…";
+    byId("anchorState").className = s.anchored ? "" : "muted";
+    byId("section").textContent = s.section ? `Section ${s.section}` : "";
+    for (const kind of ["chest", "safe", "corpse", "rareChest"]) {
+      byId(kind).textContent = s.anchored ? s.remaining[kind] : "–";
+    }
+    byId("corpseProgress").innerHTML = (s.corpses || [])
+      .map((c) => `<div class="row"><span class="corpse">Corpse in progress</span><span class="pips">${pips(c.done, c.total)}</span></div>`)
+      .join("");
+    byId("anchors").textContent = s.anchored ? `${s.anchors.powered}/${s.anchors.total}` : "–";
+    byId("dev").hidden = !s.dev;
+    byId("devToggle").classList.toggle("on", !!s.dev);
+    byId("tag").classList.toggle("on", !!s.tagArmed);
+    byId("tagHint").hidden = !s.tagArmed;
+    renderCandidates(s.lastTag);
+    renderLink(s.link, s.linkCount);
+    renderCompare(s.compare);
+    renderWatch(s.watch, s.link && s.link.step);
+  };
+
+  window.addEventListener("message", (event) => {
+    if (!event.data || event.data.type !== "pluginMessage") return;
+    render(JSON.parse(new TextDecoder().decode(event.data.content)));
+  });
+</script>
+</body>
+</html>

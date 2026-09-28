@@ -11,8 +11,12 @@ local key = function(dx, dz)
   return dx .. "," .. dz
 end
 
+local objectKey = function(kind, dx, dz)
+  return kind .. "," .. dx .. "," .. dz
+end
+
 function M.new()
-  return { anchor = nil, lootedCorpses = {}, rummages = {} }
+  return { anchor = nil, lootedCorpses = {}, rummages = {}, lootedObjects = {}, poweredAnchors = {} }
 end
 
 function M.setAnchor(state, anchor)
@@ -27,6 +31,40 @@ end
 function M.resetRun(state)
   state.lootedCorpses = {}
   state.rummages = {}
+  state.lootedObjects = {}
+  state.poweredAnchors = {}
+end
+
+function M.markObjectLooted(state, kind, dx, dz)
+  local k = objectKey(kind, dx, dz)
+  if state.lootedObjects[k] then
+    return false
+  end
+  state.lootedObjects[k] = true
+  return true
+end
+
+function M.isObjectLooted(state, kind, dx, dz)
+  return state.lootedObjects[objectKey(kind, dx, dz)] == true
+end
+
+function M.toggleAnchor(state, dx, dz)
+  local k = key(dx, dz)
+  state.poweredAnchors[k] = not state.poweredAnchors[k] or nil
+  return state.poweredAnchors[k] == true
+end
+
+function M.setAnchorPowered(state, dx, dz)
+  local k = key(dx, dz)
+  if state.poweredAnchors[k] then
+    return false
+  end
+  state.poweredAnchors[k] = true
+  return true
+end
+
+function M.isAnchorPowered(state, dx, dz)
+  return state.poweredAnchors[key(dx, dz)] == true
 end
 
 function M.rummageCount(state, dx, dz)
@@ -110,6 +148,12 @@ function M.encode(state)
   for k, count in pairs(state.rummages) do
     out[#out + 1] = "rummage," .. k .. "," .. count
   end
+  for k in pairs(state.lootedObjects) do
+    out[#out + 1] = "looted," .. k
+  end
+  for k in pairs(state.poweredAnchors) do
+    out[#out + 1] = "powered," .. k
+  end
   table.sort(out)
   return table.concat(out, "\n") .. "\n"
 end
@@ -124,6 +168,12 @@ function M.decode(text)
       state.lootedCorpses[key(tonumber(a), tonumber(b))] = true
     elseif kind == "rummage" and c ~= "" then
       state.rummages[key(tonumber(a), tonumber(b))] = tonumber(c)
+    elseif kind == "powered" then
+      state.poweredAnchors[key(tonumber(a), tonumber(b))] = true
+    end
+    local lootedKind, lx, lz = line:match("^looted,(%a+),(%-?%d+),(%-?%d+)$")
+    if lootedKind then
+      state.lootedObjects[objectKey(lootedKind, tonumber(lx), tonumber(lz))] = true
     end
   end
   return state

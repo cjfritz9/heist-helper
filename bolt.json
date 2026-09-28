@@ -1,6 +1,6 @@
 {
-  "name": "Vault of Hereditas",
-  "version": "0.8.0",
-  "description": "Route, loot point and reward projections for the Vault of Hereditas heist.",
+  "name": "Heist Helper",
+  "version": "0.11.0",
+  "description": "Object outlines, loot tracking and run status for the Vault of Hereditas heist.",
   "main": "main.lua"
 }

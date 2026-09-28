@@ -29,6 +29,8 @@ return {
   { kind = "corpse", dx = 11, dz = -31 },
   { kind = "corpse", dx = 22, dz = -51 },
   { kind = "corpse", dx = 5, dz = -63 },
+  { kind = "shadowDial", dx = -3, dz = -33 },
+  { kind = "shadowDial", dx = -28, dz = -6 },
   { kind = "shadowAnchor", dx = 5, dz = -25 },
   { kind = "shadowAnchor", dx = -14, dz = -30 },
   { kind = "shadowAnchor", dx = -8, dz = -63 },

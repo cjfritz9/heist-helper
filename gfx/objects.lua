@@ -4,7 +4,7 @@ local lines = require("gfx.lines")
 
 local M = {}
 
-local THICKNESS = 2
+local THICKNESS = 4
 local ALPHA = 235
 local PIP_EMPTY_ALPHA = 90
 
@@ -13,7 +13,11 @@ local COLOURS = {
   safe = { 0, 200, 255 },
   rareChest = { 255, 60, 220 },
   corpse = { 255, 140, 0 },
+  shadowDial = { 150, 90, 255 },
+  shadowAnchor = { 0, 230, 170 },
 }
+local LOCKED_COLOUR = { 150, 150, 150 }
+COLOURS.selected = { 60, 255, 90 }
 
 local pipQuads = function(quads, outline, progress, rgb)
   for _, p in ipairs(pips.layout(outline, progress.done, progress.total)) do
@@ -28,7 +32,7 @@ function M.draw(bolt, objects)
   local edges, quads = {}, {}
   for _, o in ipairs(objects) do
     local outline = hull.convex(o.points or {})
-    local rgb = COLOURS[o.kind]
+    local rgb = o.locked and LOCKED_COLOUR or COLOURS[o.kind]
     local colour = { rgb[1], rgb[2], rgb[3], ALPHA }
     for i = 1, #outline do
       local a, b = outline[i], outline[i % #outline + 1]

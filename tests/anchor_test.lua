@@ -58,6 +58,7 @@ function T.object_map_covers_all_thirty_loot_sources()
   assert.eq(counts.safe, 8, "safes")
   assert.eq(counts.rareChest, 1, "rare chest")
   assert.eq(counts.corpse, 8, "corpses")
+  assert.eq(counts.shadowDial, 2, "dial and its partner")
 end
 
 function T.every_mapped_object_resolves_to_a_unique_anchor()

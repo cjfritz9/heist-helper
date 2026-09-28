@@ -7,6 +7,11 @@
 /run.csv
 /objects.csv
 /probe.log
+/record.log
+/panel.csv
+/catalog.csv
+/links.csv
+/watch.log
 
 # Anything credential-shaped
 creds
@@ -24,3 +29,4 @@ creds
 Thumbs.db
 desktop.ini
 .DS_Store
+

@@ -50,8 +50,42 @@ function T.shadow_anchor_is_recognised_without_a_state()
   assert.eq(looted, nil, "powered state unknown")
 end
 
+function T.shadow_dial_is_recognised()
+  assert.eq(catalog.classify(684, "c8aa0e18", false), "shadowDial", "dial body")
+end
+
+function T.shadow_texture_marks_a_chest_locked()
+  assert.eq(catalog.needsTexture(3444, "9f69f595"), true, "unopened chest checks texture")
+  assert.eq(catalog.needsTexture(3264, "8eaac06a"), false, "opened chest doesn't")
+  local kind, looted, locked = catalog.classify(3444, "9f69f595", false, "bd02db92")
+  assert.eq(kind, "chest", "kind")
+  assert.eq(looted, false, "unlooted")
+  assert.eq(locked, true, "shadow texture")
+  assert.eq(select(3, catalog.classify(3444, "9f69f595", false, "7f47337c")), false, "regular texture")
+  assert.eq(select(3, catalog.classify(3444, "9f69f595", false, nil)), false, "no texture read")
+end
+
 function T.matching_vertex_count_with_other_fingerprint_is_rejected()
   assert.eq(catalog.classify(3444, "00000000", false), nil, "wrong model")
+end
+
+function T.models_can_be_added_at_runtime()
+  assert.eq(catalog.isCandidate(777), false, "unknown before")
+  assert.eq(catalog.add(777, "0000beef", "chest", true), true, "added")
+  assert.eq(catalog.add(777, "0000beef", "chest", true), false, "not twice")
+  local kind, looted = catalog.classify(777, "0000beef", false)
+  assert.eq(kind, "chest", "kind")
+  assert.eq(looted, true, "state")
+end
+
+function T.user_models_round_trip_through_text()
+  catalog.add(778, "0000cafe", "corpse", nil)
+  local text = catalog.encodeUser()
+  assert.eq(text:find("778,0000cafe,corpse,-", 1, true) ~= nil, true, "encoded")
+  catalog.loadUser("779,0000f00d,chest,0\nnot a line\n")
+  local kind, looted = catalog.classify(779, "0000f00d", false)
+  assert.eq(kind, "chest", "loaded kind")
+  assert.eq(looted, false, "loaded state")
 end
 
 return T
