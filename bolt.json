@@ -1,0 +1,6 @@
+{
+  "name": "Vault of Hereditas",
+  "version": "0.4.0",
+  "description": "Route, loot point and reward projections for the Vault of Hereditas heist.",
+  "main": "main.lua"
+}

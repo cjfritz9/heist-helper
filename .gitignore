@@ -1,0 +1,22 @@
+# Bolt runtime files, in case they get copied here (root only, so mapping/ data stays tracked)
+/positions.csv
+/markers.csv
+/tags.csv
+/error.log
+
+# Anything credential-shaped
+creds
+*.token
+.env
+
+# Release archives: publish these as release assets, not in history
+*.tar.xz
+*.tar.zst
+*.zip
+
+# Editor and OS clutter
+.vscode/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
