@@ -12,7 +12,8 @@ A display-only Bolt plugin for the Vault of Hereditas heist. The design, feature
 |---|---|---|
 | **Alt + Middle Click** | Toggle a marker on the tile you're standing on: removes it if there is one, adds one if not. Takes effect immediately | White = added, orange = removed |
 | **Shift + Middle Click** | Log your tile to `positions.csv` for mapping | Green |
-| **Ctrl + Middle Click** on an object | Tag it: records the 3D models under the cursor (up to 8, smallest first) to `tags.csv` for object-detection experiments | Cyan = tagged, red = nothing found |
+| **Ctrl + Middle Click** on an object | Tag it: records the 3D models under the cursor (up to 8, smallest first) to `tags.csv`, with vertex count, animation flag, tile, on-screen size, shape and texture hashes, and the time of the latest chat line | Cyan = tagged, red = nothing found |
+| *(automatic)* | While you're in the vault, new chat lines are appended to `chat.log`. **Needs chat timestamps turned on**, and the chat box must be visible and not scrolled up | None |
 | Either, while your position is unknown | Nothing. Walk a tile and retry | Red |
 
 Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and loaded on the next start. That file takes priority over `data/markers.lua`: to go back to the generated markers, delete `markers.csv` and restart the plugin. Code changes still need a plugin restart; marker edits don't. The reward maths (F1) and the level-based reachability model (F2) are written and unit-tested, but they aren't shown on screen yet.
@@ -26,11 +27,14 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `core/coords.lua` | World units to tile and chunk conversion (512 units per tile, 64 tiles per chunk; X is east, Z is north) |
 | `core/poslog.lua` | CSV rows for the position log |
 | `core/markerstore.lua` | Saves and loads edited markers; toggles a marker on a tile |
+| `core/chatlines.lua` | Splits chat lines into timestamp and text |
 | `core/picking.lua` | Screen boxes, model fingerprints and `tags.csv` rows for object tagging |
 | `gfx/picker.lua` | Finds the 3D models under the cursor on the frame after a Ctrl + Middle Click |
 | `core/markerdata.lua` | Turns a mapping CSV into markers relative to the arrival tile; nearby-marker lookup |
 | `data/markers.lua` | **Generated** marker data. Don't edit by hand |
 | `gfx/lines.lua` | Shader-based line and quad drawing (adapted from bolt-groundmarkers, see `THIRD_PARTY.md`) |
+| `game/chatlog.lua` | Finds the chat box by its speech-bubble icon and passes new lines on |
+| `modules/chat/` | Vendored bolt-chatmodule, which reads chat text (public domain, see `THIRD_PARTY.md`) |
 | `gfx/markers.lua` | Projects markers onto the game view and draws them |
 | `tools/build_markers.lua` | Regenerates `data/markers.lua` from a mapping CSV |
 | `mapping/` | Mapping runs: raw logs, cleaned CSVs, plots |
@@ -46,7 +50,7 @@ Everything under `core/` and `data/` is pure Lua with no dependency on Bolt, so 
 luajit tools/build_markers.lua mapping/run1.csv > data/markers.lua
 ```
 
-The CSV's first row must be the arrival tile. Every other row becomes an offset from it, and duplicate tiles are merged. Then turn the plugin off and on in Bolt to reload it. If drawing or tagging fails in game, the first error of each kind is saved to `error.log` in the plugin's Bolt config folder, next to `positions.csv`.
+The CSV's first row must be the arrival tile. Every other row becomes an offset from it, and duplicate tiles are merged. Then turn the plugin off and on in Bolt to reload it. If drawing, tagging or chat reading fails in game, the first error of each kind is saved to `error.log` in the plugin's Bolt config folder, next to `positions.csv`.
 
 ## Development
 

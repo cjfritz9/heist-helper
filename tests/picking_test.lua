@@ -54,10 +54,26 @@ function T.rows_are_relative_to_anchor_and_limited()
     vertices = 120, texture = 7, animated = false,
     tileX = 11310, tileZ = 3240, originY = 4933.4,
     box = boxOf({ { 100, 200 }, { 140, 260 } }),
-    fingerprint = "0000abcd",
+    fingerprint = "0000abcd", shape = "1111aaaa", uv = "2222bbbb",
   }
-  local text = picking.rows(3, { candidate, candidate }, 11299, 3243, 120, 230, 1)
-  assert.eq(text, "3,1,120,7,0,11310,3240,11,-3,4933,40,60,0000abcd,120,230\n", "row")
+  local text = picking.rows(3, { candidate, candidate }, 11299, 3243, 120, 230, "22:57:46", 1)
+  assert.eq(text, "3,1,120,7,0,11310,3240,11,-3,4933,40,60,0000abcd,1111aaaa,2222bbbb,22:57:46,120,230\n", "row")
+end
+
+function T.rows_mark_missing_chat_time()
+  local candidate = {
+    vertices = 1, texture = 1, animated = true, tileX = 0, tileZ = 0, originY = 0,
+    box = boxOf({ { 0, 0 }, { 1, 1 } }), fingerprint = "a", shape = "b", uv = "c",
+  }
+  local text = picking.rows(1, { candidate }, 0, 0, 0, 0, nil, 1)
+  assert.eq(text:match(",b,c,(.-),"), "-", "placeholder")
+end
+
+function T.start_log_keeps_current_format_and_resets_old()
+  local current = picking.HEADER .. "1,1,x\n"
+  assert.eq(picking.startLog(current), current, "kept")
+  assert.eq(picking.startLog("tag,rank,old\n1,1,x\n"), picking.HEADER, "old format reset")
+  assert.eq(picking.startLog(nil), picking.HEADER, "missing file")
 end
 
 return T

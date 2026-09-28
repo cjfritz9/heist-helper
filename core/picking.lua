@@ -1,6 +1,6 @@
 local M = {}
 
-M.HEADER = "tag,rank,vertices,texture,animated,tileX,tileZ,dx,dz,originY,boxW,boxH,fingerprint,mouseX,mouseY\n"
+M.HEADER = "tag,rank,vertices,texture,animated,tileX,tileZ,dx,dz,originY,boxW,boxH,fingerprint,shape,uv,lastChat,mouseX,mouseY\n"
 
 local HASH_MODULUS = 4294967296
 
@@ -47,6 +47,13 @@ function M.rank(candidates)
   return candidates
 end
 
+function M.startLog(text)
+  if text and text:sub(1, #M.HEADER) == M.HEADER then
+    return text
+  end
+  return M.HEADER
+end
+
 function M.lastTag(text)
   local last = 0
   for n in text:gmatch("\n(%d+),") do
@@ -55,15 +62,15 @@ function M.lastTag(text)
   return last
 end
 
-function M.rows(tag, candidates, anchorX, anchorZ, mouseX, mouseY, limit)
+function M.rows(tag, candidates, anchorX, anchorZ, mouseX, mouseY, lastChat, limit)
   local out = {}
   for rank = 1, math.min(limit, #candidates) do
     local c = candidates[rank]
-    out[#out + 1] = string.format("%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f,%.0f,%.0f,%s,%d,%d\n",
+    out[#out + 1] = string.format("%d,%d,%d,%d,%d,%d,%d,%d,%d,%.0f,%.0f,%.0f,%s,%s,%s,%s,%d,%d\n",
       tag, rank, c.vertices, c.texture, c.animated and 1 or 0,
       c.tileX, c.tileZ, c.tileX - anchorX, c.tileZ - anchorZ, c.originY,
       c.box.maxX - c.box.minX, c.box.maxY - c.box.minY,
-      c.fingerprint, mouseX, mouseY)
+      c.fingerprint, c.shape, c.uv, lastChat or "-", mouseX, mouseY)
   end
   return table.concat(out)
 end

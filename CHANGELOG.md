@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.6.0 (unreleased)
+
+- Tags now record a whole-model shape hash (`shape`), a texture-coordinate hash (`uv`) and the time of the latest chat line (`lastChat`), so model states can be compared and tags lined up with chat events.
+- A `tags.csv` in the old format is started fresh instead of mixed with new rows.
+- Run 2 tag data and findings saved in `mapping/tags-run2.csv` and `mapping/tags-run2-notes.md`.
+
+## 0.5.0
+
+- Chat logging inside the vault: new chat lines go to `chat.log` in the plugin config, as groundwork for counting corpse rummages. Needs chat timestamps turned on in game.
+- Vendored bolt-chatmodule for reading chat text.
+
+## 0.4.0
 
 - Ctrl + Middle Click tags an object: the 3D models under the cursor are logged to `tags.csv` with vertex count, texture ID, world tile, on-screen size and a shape fingerprint, as groundwork for object highlighting.
 - Tile markers now project with `togameview`, so they no longer shift if the game view doesn't start at the window corner.

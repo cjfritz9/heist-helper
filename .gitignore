@@ -3,6 +3,7 @@
 /markers.csv
 /tags.csv
 /error.log
+/chat.log
 
 # Anything credential-shaped
 creds

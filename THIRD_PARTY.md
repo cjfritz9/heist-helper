@@ -1,5 +1,9 @@
 # Third-party code
 
+## bolt-chatmodule
+
+`modules/chat/chat.lua` is an unmodified copy of https://codeberg.org/Adamcake/bolt-chatmodule at commit `5eb93c6d1921331e48b3b39c23bf486fa79bfc34` (2026-07-15), by Adamcake. It's public domain; see `modules/chat/UNLICENSE`. The module's `speech-bubble.png` isn't included because it's game artwork, but the pixel row `game/chatlog.lua` matches against comes from it.
+
 ## bolt-groundmarkers
 
 `gfx/lines.lua` is adapted from `gfx/shaders.lua` in https://github.com/J3sven/bolt-groundmarkers.

@@ -6,6 +6,7 @@ local M = {}
 local PICK_RADIUS_TILES = 20
 local MAX_SAMPLES = 256
 local FINGERPRINT_VERTICES = 16
+local UV_PRECISION = 4096
 
 local pending = nil
 
@@ -38,13 +39,23 @@ function M.inspect(bolt, event)
   local viewProj = event:viewprojmatrix()
   local count = event:vertexcount()
   local box = picking.newBox()
+  local sampled = {}
   for i = 1, count, picking.stride(count, MAX_SAMPLES) do
-    local sx, sy, depth = event:vertexpoint(i):transform(model):transform(viewProj):toscreen()
+    local modelPoint = event:vertexpoint(i)
+    local sx, sy, depth = modelPoint:transform(model):transform(viewProj):toscreen()
     if onScreen(depth) then
       picking.extend(box, sx, sy)
     end
+    sampled[#sampled + 1] = { i = i, point = modelPoint }
   end
   if not picking.contains(box, pending.x, pending.y) then return end
+
+  local shapePoints, uvPoints = {}, {}
+  for n, s in ipairs(sampled) do
+    shapePoints[n] = { s.point:get() }
+    local u, v = event:vertexuv(s.i)
+    uvPoints[n] = { u * UV_PRECISION, v * UV_PRECISION }
+  end
 
   local shape = {}
   for i = 1, math.min(count, FINGERPRINT_VERTICES) do
@@ -60,6 +71,8 @@ function M.inspect(bolt, event)
     originY = oy,
     box = box,
     fingerprint = picking.fingerprint(shape),
+    shape = picking.fingerprint(shapePoints),
+    uv = picking.fingerprint(uvPoints),
   }
 end
 

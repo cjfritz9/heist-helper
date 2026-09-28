@@ -7,12 +7,18 @@ local markerstore = require("core.markerstore")
 local picking = require("core.picking")
 local picker = require("gfx.picker")
 local markers = require("gfx.markers")
+local markerdata = require("core.markerdata")
+local chatlog = require("game.chatlog")
+local chatlines = require("core.chatlines")
+local chatModule = require("modules.chat.chat")
 local seedMarkers = require("data.markers")
 
 local LOG_FILE = "positions.csv"
 local MARKERS_FILE = "markers.csv"
 local TAGS_FILE = "tags.csv"
 local TAG_ROWS_PER_CLICK = 8
+local CHAT_FILE = "chat.log"
+local VAULT_RADIUS_TILES = 64
 local ERROR_FILE = "error.log"
 local MIDDLE_BUTTON = 3
 local FLASH_MICROSECONDS = 400 * 1000
@@ -56,11 +62,28 @@ end
 local log = bolt.loadconfig(LOG_FILE) or poslog.HEADER
 local count = poslog.countRows(log)
 
-local tags = bolt.loadconfig(TAGS_FILE) or picking.HEADER
+local tags = picking.startLog(bolt.loadconfig(TAGS_FILE))
 local tagCount = picking.lastTag(tags)
 
 local savedMarkers = bolt.loadconfig(MARKERS_FILE)
 local markerData = (savedMarkers and markerstore.decode(savedMarkers)) or markerstore.copy(seedMarkers)
+
+local chatText = bolt.loadconfig(CHAT_FILE) or ""
+local chatReader = chatlog.new(chatModule)
+
+local inVault = function()
+  local position = bolt.playerposition()
+  if not position then return false end
+  local x, _, z = position:get()
+  local tile = coords.fromWorld(x, z)
+  return #markerdata.nearby(markerData, tile.tileX, tile.tileZ, VAULT_RADIUS_TILES) > 0
+end
+
+local recordChat = function(message)
+  if not inVault() then return end
+  chatText = chatText .. message .. "\n"
+  bolt.saveconfig(CHAT_FILE, chatText)
+end
 
 local logPosition = function(x, y, z)
   count = count + 1
@@ -81,8 +104,9 @@ local saveTag = function(finished)
     return
   end
   tagCount = tagCount + 1
+  local lastChat = chatReader.mostRecent and chatlines.split(chatReader.mostRecent)
   tags = tags .. picking.rows(tagCount, finished.candidates, markerData.anchorX, markerData.anchorZ,
-    finished.x, finished.y, TAG_ROWS_PER_CLICK)
+    finished.x, finished.y, lastChat, TAG_ROWS_PER_CLICK)
   bolt.saveconfig(TAGS_FILE, tags)
   showFlash("tagged")
 end
@@ -114,6 +138,13 @@ bolt.onrender3d(function(event)
     if not ok then
       reportError("tag", err)
     end
+  end
+end)
+
+bolt.onrender2d(function(event)
+  local ok, err = pcall(chatlog.read, chatReader, bolt.time(), event, recordChat)
+  if not ok then
+    reportError("chat", err)
   end
 end)
 
