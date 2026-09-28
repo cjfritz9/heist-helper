@@ -1,14 +1,21 @@
 package.path = "./?.lua;" .. package.path
 
 local SUITES = {
+  "tests.anchor_test",
+  "tests.catalog_test",
   "tests.chatlines_test",
   "tests.chatlog_test",
   "tests.coords_test",
+  "tests.hull_test",
   "tests.markerdata_test",
   "tests.markerstore_test",
+  "tests.objectmap_test",
   "tests.picking_test",
+  "tests.pips_test",
+  "tests.probediff_test",
   "tests.poslog_test",
   "tests.rewards_test",
+  "tests.runstate_test",
   "tests.vault_test",
 }
 

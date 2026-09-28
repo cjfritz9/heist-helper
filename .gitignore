@@ -4,6 +4,9 @@
 /tags.csv
 /error.log
 /chat.log
+/run.csv
+/objects.csv
+/probe.log
 
 # Anything credential-shaped
 creds

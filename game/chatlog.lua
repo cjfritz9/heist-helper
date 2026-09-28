@@ -9,7 +9,7 @@ local BUBBLE_ROW_PIXELS =
 local RECHECK_MICROSECONDS = 500 * 1000
 
 function M.new(chatModule)
-  return { chat = chatModule, mostRecent = nil, nextCheck = 0, scrolled = false }
+  return { chat = chatModule, mostRecent = nil, nextCheck = 0, scrolled = false, primed = false }
 end
 
 function M.findBubble(event)
@@ -30,9 +30,12 @@ function M.read(reader, now, event, onMessage)
   if not start then return end
   local isChat, isScrolled = reader.chat:tryreadchat(event, start, reader.mostRecent, function(message)
     reader.mostRecent = message
-    onMessage(message)
+    if reader.primed then
+      onMessage(message)
+    end
   end)
   if isChat then
+    reader.primed = true
     reader.scrolled = isScrolled and true or false
     reader.nextCheck = now + RECHECK_MICROSECONDS
   end

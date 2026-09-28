@@ -46,14 +46,24 @@ function T.no_bubble_means_no_chat()
   assert.eq(chatlog.findBubble(fakeEvent({ other(1), other(2) })), nil, "no bubble")
 end
 
-function T.new_messages_reach_callback_and_update_most_recent()
+function T.first_read_skips_backlog_but_remembers_newest()
   local chat = fakeChat({ "[12:00:01] a", "[12:00:02] b" }, true, false)
   local reader = chatlog.new(chat)
   local seen = {}
   chatlog.read(reader, 1000, fakeEvent({ bubble(1) }), function(m) seen[#seen + 1] = m end)
-  assert.eq(#seen, 2, "messages")
+  assert.eq(#seen, 0, "backlog skipped")
   assert.eq(reader.mostRecent, "[12:00:02] b", "most recent")
   assert.eq(chat.calls[1].start, 7, "reads after bubble")
+end
+
+function T.later_reads_deliver_new_messages()
+  local chat = fakeChat({ "[12:00:03] c" }, true, false)
+  local reader = chatlog.new(chat)
+  reader.primed = true
+  local seen = {}
+  chatlog.read(reader, 1000, fakeEvent({ bubble(1) }), function(m) seen[#seen + 1] = m end)
+  assert.eq(#seen, 1, "delivered")
+  assert.eq(seen[1], "[12:00:03] c", "message")
 end
 
 function T.waits_before_rechecking_after_a_read()

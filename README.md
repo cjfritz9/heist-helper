@@ -4,7 +4,22 @@ A display-only Bolt plugin for the Vault of Hereditas heist. The design, feature
 
 ## Status
 
-**Phase 1 (unlabelled tile markers).** Inside the vault the plugin outlines every tile logged on mapping run 1, drawn in white, with the arrival tile in yellow. Each marker still records its section, guessed from height, for later use. Markers aren't labelled by type yet (safe spot, chest, anchor).
+**Object highlighting (0.7.0).** Inside the vault, every unlooted chest, safe, rare chest and corpse gets an outline around its model: yellow for chests (shadow chests use the same model), cyan for safes, magenta for the rare chest, orange for corpses. An outline disappears once the object is looted:
+
+| Object | How the plugin knows it's looted |
+|---|---|
+| Chest, rare chest | The game swaps in the opened model |
+| Safe | The model stops animating once cracked |
+| Corpse | Five `You loot …` chat lines while it's the nearest recognised object within 3 tiles (pips above it show progress). `You've taken everything you can from that target.` finishes it early as a backup |
+
+Vault instances land in a different place on the map each run, always shifted by whole 64-tile regions. The plugin finds each run's arrival tile (its **anchor**) automatically:
+
+- when you arrive, from the teleport onto a tile at the arrival height that sits on the right place in the 64-tile grid
+- otherwise from any recognised object whose position relative to the arrival tile is known (`data/objects.lua`, plus `objects.csv`, which grows as the plugin sees more objects)
+
+The anchor and the looted corpses are saved to `run.csv`, so restarting the plugin mid-run keeps them. `Completion Time: …` in chat resets the looted state for the next run. Tile markers are placed relative to the same anchor.
+
+Chat needs **timestamps turned on**, and the chat box must be visible and scrolled to the bottom.
 
 ### Controls
 
@@ -28,6 +43,17 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `core/poslog.lua` | CSV rows for the position log |
 | `core/markerstore.lua` | Saves and loads edited markers; toggles a marker on a tile |
 | `core/chatlines.lua` | Splits chat lines into timestamp and text |
+| `core/catalog.lua` | Known object models (vertex count + fingerprint) and their looted state |
+| `core/anchor.lua` | Finds each run's arrival tile from arrival or from a recognised object; vault bounds |
+| `core/runstate.lua` | Current anchor, looted corpses, chat events that change them; saved to `run.csv` |
+| `core/objectmap.lua` | Object positions relative to the arrival tile; seeded from `data/objects.lua` |
+| `core/probediff.lua` | Set differences and log lines for the shadow anchor probe |
+| `game/probe.lua` | Records models, particles and billboards around a nearby shadow anchor and logs what changes |
+| `core/pips.lua` | Layout of the rummage-progress pips |
+| `core/hull.lua` | Convex hull used for the model outlines |
+| `data/objects.lua` | Object positions measured during the tag runs |
+| `game/objects.lua` | Recognises catalogued models each frame and projects their outline points |
+| `gfx/objects.lua` | Draws the outlines |
 | `core/picking.lua` | Screen boxes, model fingerprints and `tags.csv` rows for object tagging |
 | `gfx/picker.lua` | Finds the 3D models under the cursor on the frame after a Ctrl + Middle Click |
 | `core/markerdata.lua` | Turns a mapping CSV into markers relative to the arrival tile; nearby-marker lookup |
