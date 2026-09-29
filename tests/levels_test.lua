@@ -7,6 +7,7 @@ function T.both_on_by_default()
   local l = levels.decode(nil)
   assert.eq(l.thieving, true, "thieving")
   assert.eq(l.agility, true, "agility")
+  assert.eq(l.maze, false, "maze route off until turned on")
 end
 
 function T.round_trip()

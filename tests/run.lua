@@ -18,6 +18,8 @@ local SUITES = {
   "tests.linkwizard_test",
   "tests.lootpopups_test",
   "tests.markerdata_test",
+  "tests.maze_test",
+  "tests.mazepatterns_test",
   "tests.markerstore_test",
   "tests.nearby_test",
   "tests.objectmap_test",

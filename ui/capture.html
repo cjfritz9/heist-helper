@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<script>
+  const send = (message) => fetch("https://bolt-api/send-message", { method: "POST", body: message });
+  let grid = null;
+  let frames = 0;
+  window.addEventListener("error", (event) => send(`mazeinfo:page error ${event.message}`));
+  send("mazeinfo:ready");
+
+  const INSETS = [0, 0.05, 0.1, 0.16, 0.22];
+  const SAMPLES = [0.25, 0.4, 0.5, 0.6, 0.75];
+  const INNER = [0.35, 0.5, 0.65];
+
+  const litTiles = (width, height, content, grid) => {
+    const px = new Uint8Array(content);
+    const gx = grid.gv[0], gy = grid.gv[1], gx2 = gx + grid.gv[2], gy2 = gy + grid.gv[3];
+    const pts = grid.pts, n = grid.n;
+    const bright = (x, y) => {
+      x |= 0; y |= 0;
+      if (x < 0 || y < 0 || x >= width || y >= height) return false;
+      const i = ((height - 1 - y) * width + x) * 3;
+      const r = px[i], g = px[i + 1], b = px[i + 2];
+      return b >= 200 && r >= 150 && g <= b && r + g + b >= 450;
+    };
+    const cx = new Float64Array(4), cy = new Float64Array(4);
+    const found = [];
+    for (let j = 0; j < n - 1; j++) {
+      tile: for (let i = 0; i < n - 1; i++) {
+        const idx = [(j * n + i) * 2, (j * n + i + 1) * 2, ((j + 1) * n + i + 1) * 2, ((j + 1) * n + i) * 2];
+        for (let c = 0; c < 4; c++) {
+          const x = pts[idx[c]], y = pts[idx[c] + 1];
+          if (x < gx || y < gy || x >= gx2 || y >= gy2) continue tile;
+          cx[c] = x; cy[c] = y;
+        }
+        let sides = 0, misses = 0;
+        for (let e = 0; e < 4; e++) {
+          const a = e, b = (e + 1) % 4, o1 = (e + 3) % 4, o2 = (e + 2) % 4;
+          let hits = 0;
+          for (const t of SAMPLES) {
+            for (const inset of INSETS) {
+              const ax = cx[a] + (cx[o1] - cx[a]) * inset, ay = cy[a] + (cy[o1] - cy[a]) * inset;
+              const bx = cx[b] + (cx[o2] - cx[b]) * inset, by = cy[b] + (cy[o2] - cy[b]) * inset;
+              if (bright(ax + (bx - ax) * t, ay + (by - ay) * t)) { hits++; break; }
+            }
+          }
+          if (hits >= 3) sides++; else if (++misses > 1) continue tile;
+        }
+        let inner = 0;
+        for (const u of INNER) {
+          for (const v of INNER) {
+            const lx = cx[0] + (cx[3] - cx[0]) * v, ly = cy[0] + (cy[3] - cy[0]) * v;
+            const rx = cx[1] + (cx[2] - cx[1]) * v, ry = cy[1] + (cy[2] - cy[1]) * v;
+            if (bright(lx + (rx - lx) * u, ly + (ry - ly) * u) && ++inner > 1) continue tile;
+          }
+        }
+        if (sides >= 3) found.push(`${grid.dx0 + i},${grid.dz0 + j}`);
+      }
+    }
+    return found;
+  };
+
+  window.addEventListener("message", (event) => {
+    if (!event.data) return;
+    if (event.data.type === "pluginMessage") {
+      grid = JSON.parse(new TextDecoder().decode(event.data.content));
+      return;
+    }
+    if (event.data.type === "screenCapture") {
+      frames++;
+      if (!grid) {
+        send(`mazeinfo:frame ${frames} ${event.data.width}x${event.data.height} but no grid yet`);
+        return;
+      }
+      const found = litTiles(event.data.width, event.data.height, event.data.content, grid);
+      if (frames <= 3 || frames % 20 === 0) {
+        send(`mazeinfo:frame ${frames} ${event.data.width}x${event.data.height}, ${found.length} lit`);
+      }
+      send(`mazelit:${found.join(";")}`);
+    }
+  });
+</script>
+</body>
+</html>

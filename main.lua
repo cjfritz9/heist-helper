@@ -31,6 +31,8 @@ local recorder = require("game.recorder")
 local panel = require("game.panel")
 local watch = require("game.watch")
 local inventory = require("game.inventory")
+local mazegrid = require("game.mazegrid")
+local mazeroute = require("game.mazeroute")
 local lootcounter = require("game.lootcounter")
 local chatModule = require("modules.chat.chat")
 local seedMarkers = require("data.markers")
@@ -48,6 +50,8 @@ local RECORD_FILE = "record.log"
 local CATALOG_FILE = "catalog.csv"
 local LINKS_FILE = "links.csv"
 local WATCH_FILE = "watch.log"
+local WATCH_LINES = 5000
+local MAZE_CENTRE = { dx = -1, dz = -80, radius = 16 }
 local LEVELS_FILE = "levels.csv"
 local CREVICES_FILE = "crevices.csv"
 local BATTERY_FILE = "battery.csv"
@@ -183,32 +187,28 @@ local batterySignature = (bolt.loadconfig(BATTERY_FILE) or ""):match("^%s*(%S+)"
 local knownLabels = {}
 local batteryLearner = stacklabels.newLearner()
 
-local watchHistory = bolt.loadconfig(WATCH_FILE) or ""
-local lastWatchReport = ""
-
-local nextWatchFlush = 0
+local watchLog = rollinglog.new(bolt.loadconfig(WATCH_FILE), WATCH_LINES)
+local watchState = { dirty = false, nextFlush = 0 }
+local shots = { count = 0, pending = false }
 
 local flushWatchRaw = function(now)
   local text = watch.takeRaw()
-  if text ~= "" then
-    watchHistory = watchHistory .. text
+  for line in text:gmatch("[^\n]+") do
+    rollinglog.append(watchLog, line)
+    watchState.dirty = true
   end
-  if now >= nextWatchFlush then
-    bolt.saveconfig(WATCH_FILE, watchHistory)
-    nextWatchFlush = now + 1000 * 1000
+  if watchState.dirty and now >= watchState.nextFlush then
+    bolt.saveconfig(WATCH_FILE, rollinglog.text(watchLog))
+    watchState.dirty = false
+    watchState.nextFlush = now + 5 * 1000 * 1000
   end
 end
 
-local saveWatchReport = function(permanent)
-  local report = watch.report()
-  if report == lastWatchReport and not permanent then return end
-  lastWatchReport = report
-  if permanent then
-    watchHistory = watchHistory .. report .. "\n"
-    bolt.saveconfig(WATCH_FILE, watchHistory)
-  else
-    bolt.saveconfig(WATCH_FILE, watchHistory .. report)
+local saveWatchReport = function()
+  for line in watch.report():gmatch("[^\n]+") do
+    rollinglog.append(watchLog, line)
   end
+  bolt.saveconfig(WATCH_FILE, rollinglog.text(watchLog))
 end
 
 catalog.loadUser(bolt.loadconfig(CATALOG_FILE))
@@ -246,6 +246,7 @@ local saveRun = function()
   bolt.saveconfig(RUN_FILE, runstate.encode(run))
 end
 lootcounter.init(bolt, run, saveRun)
+mazeroute.init(bolt, lootcounter.append)
 
 local syncMarkersToAnchor = function()
   if run.anchor then
@@ -563,6 +564,14 @@ end
 local noticeAnchorClick = function(x, y)
   if not run.anchor then return end
   local vx, vy = bolt.gameviewxywh()
+  if playerLevels.maze then
+    for _, o in ipairs(objectsInView) do
+      if o.kind == "shadowCrystal" and anchorclick.contains(o.points, x - vx, y - vy) then
+        mazeroute.trigger(bolt.time(), o.tileX - run.anchor.x, o.tileZ - run.anchor.z)
+        return
+      end
+    end
+  end
   for _, o in ipairs(objectsInView) do
     if o.kind == "shadowAnchor" and anchorclick.contains(o.points, x - vx, y - vy) then
       local dx, dz = o.tileX - run.anchor.x, o.tileZ - run.anchor.z
@@ -758,12 +767,19 @@ local watchCommand = function(argument)
   local action, number = argument:match("^(%a+):?([%d%+%-]*)$")
   if action == "close" then
     if watch.close() then
-      saveWatchReport(true)
+      saveWatchReport()
     end
   elseif action == "clear" then
     watch.clear()
   elseif action == "radius" then
     watch.resize(number == "-" and -1 or 1)
+  elseif action == "maze" then
+    if not run.anchor then
+      showFlash("unknown")
+      return
+    end
+    watch.start(run.anchor.x + MAZE_CENTRE.dx, run.anchor.z + MAZE_CENTRE.dz, MAZE_CENTRE.radius)
+    showFlash("tagged")
   elseif action == "here" then
     if not player then
       showFlash("unknown")
@@ -894,7 +910,30 @@ panel.init(bolt, {
   logtile = function() atPlayer(logPosition) end,
   add = addTaggedModel,
   crevice = toggleCrevice,
+  capture = function()
+    shots.pending = true
+    if not panel.capture(true) then showFlash("unknown") end
+  end,
+  shot = function(image)
+    shots.pending = false
+    panel.capture(false)
+    shots.count = shots.count + 1
+    bolt.saveconfig(string.format("capture-%d.ppm", shots.count), image)
+    if run.anchor and player and viewProj then
+      bolt.saveconfig(string.format("capture-%d.csv", shots.count),
+        mazegrid.corners(bolt, viewProj, run.anchor, MAZE_CENTRE, MAZE_CENTRE.radius, player.height))
+    end
+    showFlash("added")
+  end,
   checkpoint = markCheckpoint,
+  mazerow = function(name)
+    if not player or not run.anchor then
+      showFlash("unknown")
+      return
+    end
+    local complete = mazeroute.markRow(name, player.tileX - run.anchor.x, player.tileZ - run.anchor.z)
+    showFlash(complete and "added" or "tagged")
+  end,
   level = toggleLevel,
   link = linkCommand,
   compare = compareCommand,
@@ -960,6 +999,9 @@ bolt.onswapbuffers(function()
   if active and SHOW_TILE_MARKERS then
     guarded("draw", markers.draw, bolt, markerData, viewProj)
   end
+  if player then
+    guarded("watch", watch.notePlayer, bolt.time(), player.tileX, player.tileZ)
+  end
   guarded("watch", watch.endFrame, bolt.time())
   if active then
     guarded("inventory", processInventory)
@@ -969,6 +1011,13 @@ bolt.onswapbuffers(function()
   guarded("loot", lootcounter.flush, bolt.time())
   local seenObjects, watchedModels, selectedPoints = objectScan.takeFrame()
   guarded("highlight", processObjects, seenObjects, watchedModels, selectedPoints)
+  if active then
+    guarded("maze", mazeroute.frame, run, player, viewProj, MAZE_CENTRE, playerLevels.maze, bolt.time())
+    panel.capture(shots.pending)
+    guarded("maze", mazeroute.draw, run, player, viewProj)
+  else
+    guarded("maze", mazeroute.stop)
+  end
   if active and player and RECORD_UNLINKED_ANCHORS then
     guarded("record", recorder.update, bolt.time(), objectsInView, player.tileX, player.tileZ, run.anchor,
       function(dx, dz) return links.isLinked(linkSet, dx, dz) end, appendRecord)
@@ -984,9 +1033,11 @@ bolt.onswapbuffers(function()
     panelStatus.mapping.battery = batterySignature ~= nil
     panelStatus.mapping.lootBag = lootcounter.bagKnown()
     panelStatus.mapping.checkpoints = checkpoints.list(checkpointSet)
+    panelStatus.mapping.mazeRows = mazeroute.rowStatus()
   end
   panelStatus.tagArmed = tagArmed
   panelStatus.pickTarget = pickTarget
+  panelStatus.maze = mazeroute.status()
   panelStatus.loot = run.loot
   panelStatus.lastTag = lastTag
   panelStatus.link = linkwizard.status(wizard)

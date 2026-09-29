@@ -80,6 +80,7 @@
   <div class="title muted">Your levels</div>
   <label class="toggle"><input type="checkbox" id="levelThieving"> Thieving 102+ <span class="muted">(safes)</span></label>
   <label class="toggle"><input type="checkbox" id="levelAgility"> Agility 72+ <span class="muted">(crevices)</span></label>
+  <label class="toggle"><input type="checkbox" id="mazeToggle"> Maze route <span class="muted">(reads the screen)</span></label>
 </section>
 
 <section id="dev" hidden>
@@ -110,6 +111,16 @@
   </div>
   <div class="row"><span>Loot with a section</span><b id="mapSections">–</b></div>
 
+  <div class="subhead">Maze</div>
+  <div class="muted">Mark each barrier's row: stand on the tile at one end of the 5 tiles flush against it and press, then the other end.</div>
+  <div class="buttons" id="mazeRowButtons">
+    <button data-row="west">West</button>
+    <button data-row="north">North</button>
+    <button data-row="east">East</button>
+    <button data-row="south">South</button>
+  </div>
+  <div class="row"><span>Path</span><b id="mazeState">–</b></div>
+
   <div class="subhead">Map objects</div>
   <div class="row"><span>Heights recorded</span><b id="mapHeights">–</b></div>
   <div class="row"><span>Battery stack</span><b id="mapBattery">–</b></div>
@@ -138,6 +149,8 @@
   <div class="buttons">
     <button id="watchStart">Watch selected</button>
     <button id="watchHere">Watch my tile</button>
+    <button id="watchMaze" title="Watch the whole section 4 centre room (radius 16)">Watch maze</button>
+    <button id="captureScreen" title="Save the next screen image to the plugin's config folder">Capture screen</button>
   </div>
   <div class="row">
     <span>Area <button id="watchSmaller">−</button> <b id="watchRadius">2</b> <button id="watchBigger">+</button> tiles</span>
@@ -178,6 +191,7 @@
   byId("settingsToggle").addEventListener("click", () => send("settings"));
   byId("levelThieving").addEventListener("change", () => send("level:thieving"));
   byId("levelAgility").addEventListener("change", () => send("level:agility"));
+  byId("mazeToggle").addEventListener("change", () => send("level:maze"));
   document.querySelectorAll("#checkpointButtons button").forEach((button) => {
     button.addEventListener("click", () => send(`checkpoint:${button.dataset.checkpoint}`));
   });
@@ -197,6 +211,29 @@
   byId("compareClear").addEventListener("click", () => send("compare:clear"));
   byId("watchStart").addEventListener("click", () => send(`watch:start:${selectedRank}`));
   byId("watchHere").addEventListener("click", () => send("watch:here"));
+  byId("watchMaze").addEventListener("click", () => send("watch:maze"));
+  let wantShot = false;
+  let lastRendered = null;
+  document.querySelectorAll("#mazeRowButtons button").forEach((button) => {
+    button.addEventListener("click", () => send(`mazerow:${button.dataset.row}`));
+  });
+
+  byId("captureScreen").addEventListener("click", () => {
+    wantShot = true;
+    send("capture");
+  });
+
+  const saveShot = (width, height, content) => {
+    const header = new TextEncoder().encode(`shot:P6\n${width} ${height}\n255\n`);
+    const pixels = new Uint8Array(content);
+    const out = new Uint8Array(header.length + pixels.length);
+    out.set(header, 0);
+    const row = width * 3;
+    for (let y = 0; y < height; y++) {
+      out.set(pixels.subarray((height - 1 - y) * row, (height - y) * row), header.length + y * row);
+    }
+    fetch("https://bolt-api/send-message", { method: "POST", body: out });
+  };
   byId("watchSmaller").addEventListener("click", () => send("watch:radius:-"));
   byId("watchBigger").addEventListener("click", () => send("watch:radius:+"));
   byId("watchArm").addEventListener("click", () => send("watch:arm"));
@@ -370,7 +407,17 @@
     byId("settingsToggle").classList.toggle("on", !!s.settings);
     byId("levelThieving").checked = !!(s.levels && s.levels.thieving);
     byId("levelAgility").checked = !!(s.levels && s.levels.agility);
+    byId("mazeToggle").checked = !!(s.levels && s.levels.maze);
     renderMapping(s.mapping);
+    byId("mazeState").textContent = s.maze
+      ? `${s.maze.capturing ? "capturing…, " : ""}${s.maze.lit} lit${s.maze.leg ? `, ${s.maze.leg}` : ""}${s.maze.known ? ", known maze" : ""}${s.maze.route != null ? `, route ${s.maze.route} ticks` : ""}`
+      : "–";
+    const rows = new Map((s.mapping && s.mapping.mazeRows || []).map((r) => [r.name, r]));
+    document.querySelectorAll("#mazeRowButtons button").forEach((button) => {
+      const r = rows.get(button.dataset.row);
+      button.classList.toggle("on", !!(r && r.ok));
+      button.textContent = `${button.dataset.row[0].toUpperCase()}${button.dataset.row.slice(1)}${r && !r.ok && r.ends ? ` ${r.ends}/2` : ""}`;
+    });
     byId("dev").hidden = !s.dev;
     document.documentElement.style.overflowY = s.dev ? "auto" : "hidden";
     byId("devToggle").classList.toggle("on", !!s.dev);
@@ -388,8 +435,20 @@
   };
 
   window.addEventListener("message", (event) => {
-    if (!event.data || event.data.type !== "pluginMessage") return;
-    render(JSON.parse(new TextDecoder().decode(event.data.content)));
+    if (!event.data) return;
+    if (event.data.type === "screenCapture") {
+      if (wantShot) {
+        wantShot = false;
+        saveShot(event.data.width, event.data.height, event.data.content);
+      }
+      return;
+    }
+    if (event.data.type !== "pluginMessage") return;
+    const status = JSON.parse(new TextDecoder().decode(event.data.content));
+    const key = JSON.stringify(status);
+    if (key === lastRendered) return;
+    lastRendered = key;
+    render(status);
   });
 </script>
 </body>

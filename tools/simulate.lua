@@ -51,7 +51,11 @@ local bolt = {
     b.oncloserequest = function() end
     b.sendmessage = function(self, text) self.sent[#self.sent + 1] = text end
     b.close = function(self) self.closed = true end
-    handlers.browser = b
+    b.enablecapture = function(self) self.capturing = true end
+    b.disablecapture = function(self) self.capturing = false end
+    handlers.browsers = handlers.browsers or {}
+    handlers.browsers[url] = b
+    if url ~= "plugin://ui/capture.html" then handlers.browser = b end
     return b
   end,
   onrenderbillboard = function(f) handlers.billboard = f end,
@@ -370,6 +374,8 @@ for _ = 1, 400 do frameWith(false) end
 panelBrowser.message("watch:arm")
 for _ = 1, 3 do frameWith(true) end
 for _ = 1, 5 do frameWith(false) end
+clock = clock + 0.3e6
+frameWith(false)
 local sent = panelBrowser.sent[#panelBrowser.sent]
 print("watch items:", sent:match('"items":(%b[])'))
 panelBrowser.message("watch:use:1")
@@ -399,7 +405,7 @@ for _ = 1, 3 do drawCrystal(1) end
 for _ = 1, 2 do drawCrystal(2) end
 for _ = 1, 3 do drawCrystal(1) end
 panelBrowser.message("watch:close")
-bolt.time = function() clock = clock + 2e6; return clock end
+bolt.time = function() clock = clock + 6e6; return clock end
 handlers.swap()
 bolt.time = function() clock = clock + 1000; return clock end
 print("double draw in watch.log:")
@@ -412,6 +418,14 @@ panelBrowser.message("watch:radius:+")
 handlers.swap()
 local w = require("game.watch").area()
 print("watch here, radius:", w and w.radius, w and (w.tileX .. "," .. w.tileZ))
+panelBrowser.message("watch:maze")
+local maze = require("game.watch").area()
+print("watch maze:", maze and maze.radius, maze and ((maze.tileX - 11875) .. "," .. (maze.tileZ - 4203)))
+panelBrowser.message("capture")
+print("capture on:", handlers.browser.capturing)
+handlers.browser.message("shot:P6\n2 1\n255\n\255\0\0\0\255\0")
+print("capture saved:", files["capture-1.ppm"] and #files["capture-1.ppm"], "capture off:", handlers.browser.capturing == false)
+print("capture grid rows:", select(2, (files["capture-1.csv"] or ""):gsub("\n", "")))
 panelBrowser.message("watch:clear")
 print("cleared:", require("game.watch").area() == nil)
 local spareX, spareZ = 11875 + 20, 4203 - 20
@@ -663,6 +677,59 @@ bolt.time = function() clock = clock + 2e6; return clock end
 handlers.swap()
 bolt.time = function() clock = clock + 1000; return clock end
 print("inventory.log:\n" .. (files["inventory.log"] or "<none>"))
+local mazeroute = require("game.mazeroute")
+for _, m in ipairs(catalog.MODELS) do
+  if m.kind == "shadowCrystal" then m.fingerprint = fpFor(51) end
+end
+local crystalDx, crystalDz = -14, -76
+local mazeAt = function(dx, dz, y)
+  playerPos = { (11875 + dx) * 512, y or 2176, (4203 + dz) * 512 }
+  handlers.r3d(modelEvent(2004, 51, 11875 + crystalDx, 4203 + crystalDz, false))
+  handlers.swap()
+end
+local capturer = function() return handlers.browsers["plugin://ui/capture.html"] end
+panelBrowser.message("level:maze")
+mazeAt(-24, -70, 1221)
+mazeAt(-13, -75)
+print("no capture window before a crystal click:", capturer() == nil or capturer().closed == true)
+handlers.mouse({ button = function() return 1 end, xy = function() return 103, 202 end })
+mazeAt(-13, -75)
+print("capture window after the click:", capturer() ~= nil and capturer().closed ~= true)
+capturer().message("mazeinfo:ready")
+clock = clock + 0.5e6
+mazeAt(-13, -75)
+print("not capturing during the 1.2 s wait:", capturer().capturing ~= true)
+clock = clock + 1e6
+mazeAt(-13, -75)
+print("first frame of the burst:", capturer().capturing == true)
+local lit = "-12,-77;-11,-77;-10,-77;-9,-77;-8,-77;-8,-76;-8,-75;-8,-74;-8,-73;-8,-72;-1,-82;1,-82;1,-83"
+local frames = 0
+for _ = 1, 6 do
+  if capturer() and capturer().capturing then
+    frames = frames + 1
+    capturer().message("mazelit:" .. lit)
+  end
+  clock = clock + 0.7e6
+  mazeAt(-13, -75)
+end
+print("frames captured in the burst:", frames, "window closed after:", capturer().closed == true)
+mazeAt(-12, -75)
+print("maze status on the start row:", require("core.json").encode(mazeroute.status()))
+print("clicking the same crystal again keeps it:", mazeroute.trigger(clock, crystalDx, crystalDz) == false and mazeroute.status().known == true)
+mazeAt(-11, -76)
+print("in-between tile keeps the plan:", require("core.json").encode(mazeroute.status()))
+mazeAt(-10, -77)
+print("landed on step 1:", require("core.json").encode(mazeroute.status()))
+mazeAt(-8, -76)
+print("landed on step 2:", require("core.json").encode(mazeroute.status()))
+mazeAt(-3, -70)
+print("maze status on the end row:", require("core.json").encode(mazeroute.status()))
+print("final crystal ignored:", mazeroute.trigger(clock, -6, -95) == false)
+clock = clock + 3e6
+lootFrame()
+for line in (files["loot.log"] or ""):gmatch("[^\n]+") do
+  if line:find("maze:") then print("  " .. line:sub(1, 140)) end
+end
 local a6x, a6z = 11875 + 5, 4203 - 94
 local cx, cz = 11875 - 6, 4203 - 95
 playerPos = { (a6x + 1) * 512, 2181, a6z * 512 }

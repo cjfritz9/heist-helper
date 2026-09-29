@@ -14,6 +14,7 @@ M.MODELS = {
   { vertices = 25818, fingerprint = "ac0eb5ba", kind = "corpse" },
   { vertices = 4506, fingerprint = "17aa0a87", kind = "shadowAnchor" },
   { vertices = 684, fingerprint = "c8aa0e18", kind = "shadowDial" },
+  { vertices = 2004, fingerprint = "a55442d9", kind = "shadowCrystal" },
 }
 
 M.userModels = {}

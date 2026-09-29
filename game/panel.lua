@@ -5,7 +5,7 @@ local M = {}
 local LAYOUT_FILE = "panel.csv"
 local WIDTH = 260
 local HEIGHT = 137
-local SETTINGS_HEIGHT = 204
+local SETTINGS_HEIGHT = 224
 local DEV_HEIGHT = 720
 local TAB_SIZE = 40
 local SEND_MICROSECONDS = 250 * 1000
@@ -16,6 +16,7 @@ local layout = { x = 40, y = 120, expanded = true, dev = false, settings = false
 local panel, tab = nil, nil
 local visible = false
 local lastSent, nextSend = nil, 0
+local captureWanted = false
 
 local saveLayout = function()
   bolt.saveconfig(LAYOUT_FILE, string.format("%d,%d,%d,%d,%d",
@@ -76,6 +77,7 @@ open = function()
     panel:onmessage(M.dispatch)
     panel:onreposition(rememberPosition)
     panel:oncloserequest(function() M.dispatch("collapse") end)
+    captureWanted = false
   else
     tab = bolt.createembeddedbrowser(layout.x, layout.y, TAB_SIZE, TAB_SIZE, "plugin://ui/tab.html")
     tab:onmessage(M.dispatch)
@@ -97,6 +99,18 @@ function M.setVisible(show)
   else
     closeAll()
   end
+end
+
+function M.capture(enable)
+  if enable == captureWanted then return panel ~= nil end
+  captureWanted = enable
+  if not panel then return false end
+  if enable then
+    panel:enablecapture()
+  else
+    panel:disablecapture()
+  end
+  return true
 end
 
 function M.devEnabled()

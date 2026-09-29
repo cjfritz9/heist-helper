@@ -7,7 +7,9 @@ local signature = require("game.signature")
 
 local M = {}
 
-local MIN_RADIUS, MAX_RADIUS = 1, 8
+local MIN_RADIUS, MAX_RADIUS = 1, 16
+local LARGE_RADIUS = 4
+local NO_COLOUR = { 0, 0, 0, 0 }
 local POSE_SAMPLES = 16
 
 local radius = 2
@@ -67,8 +69,11 @@ local reset = function()
   spans = {}
 end
 
-function M.start(tileX, tileZ)
+function M.start(tileX, tileZ, size)
   target = { tileX = tileX, tileZ = tileZ }
+  if size then
+    radius = math.max(MIN_RADIUS, math.min(MAX_RADIUS, size))
+  end
   reset()
 end
 
@@ -172,10 +177,26 @@ function M.inspectModel(bolt, event)
   if not where then return end
   local key = "m|" .. links.signature(signature.of(event, count)) .. "@" .. where
   frame[key] = true
+  local large = radius > LARGE_RADIUS
+  if large and event:animated() then return end
   watchdetail.add(details, key, watchdetail.model({
     x = ox, y = oy, z = oz, scale = event:scale(), matrix = { model:get() }, textureId = event:textureid(),
-    colour = colourSum(event, count), pose = pose(event, count),
+    colour = large and NO_COLOUR or colourSum(event, count), pose = not large and pose(event, count) or nil,
   }))
+end
+
+local lastPlayerTile = nil
+
+function M.notePlayer(now, tileX, tileZ)
+  if not target or not log or not log.armed or log.closed then
+    lastPlayerTile = nil
+    return
+  end
+  local here = (tileX - target.tileX) .. "," .. (tileZ - target.tileZ)
+  if here ~= lastPlayerTile then
+    raw[#raw + 1] = string.format("[%9.3f] player @%s", now / 1e6, here)
+    lastPlayerTile = here
+  end
 end
 
 function M.inspectParticles(event)
@@ -185,7 +206,9 @@ function M.inspectParticles(event)
     if where then
       local key = "p|" .. atlasSize(event, i) .. "@" .. where
       frame[key] = true
-      watchdetail.add(details, key, watchdetail.colour(event:vertexcolour(i)))
+      if radius <= LARGE_RADIUS then
+        watchdetail.add(details, key, watchdetail.colour(event:vertexcolour(i)))
+      end
     end
   end
 end
@@ -211,7 +234,7 @@ local recordRaw = function(now, described)
   if lastFrame then
     local stamp = string.format("[%9.3f] ", now / 1e6)
     for sig in pairs(frame) do
-      if not lastFrame[sig] then raw[#raw + 1] = stamp .. "+ " .. sig .. " " .. described[sig] end
+      if not lastFrame[sig] then raw[#raw + 1] = stamp .. "+ " .. sig .. " " .. (described[sig] or "") end
     end
     for sig in pairs(lastFrame) do
       if not frame[sig] then raw[#raw + 1] = stamp .. "- " .. sig end

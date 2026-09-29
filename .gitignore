@@ -19,6 +19,9 @@
 /checkpoints.csv
 /battery.csv
 /lootbag.csv
+/capture-*.ppm
+/capture-*.csv
+/maze.csv
 
 # Anything credential-shaped
 creds
