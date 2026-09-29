@@ -118,62 +118,62 @@ local sign = function(v)
   return v > 0 and 1 or (v < 0 and -1 or 0)
 end
 
+local COST = { tick = 1e9, walk = 1e7, offCentre = 1e5, turn = 1e2, diagonal = 1 }
+
+local moveCost = function(ox, oz, lastX, lastZ, last)
+  local cost = COST.tick
+  if not last and math.max(math.abs(ox), math.abs(oz)) < M.RUN_TILES then cost = cost + COST.walk end
+  if lastX and (sign(ox) ~= lastX or sign(oz) ~= lastZ) then cost = cost + COST.turn end
+  if ox ~= 0 and oz ~= 0 then cost = cost + COST.diagonal end
+  return cost
+end
+
 function M.route(session, rows, fromDx, fromDz, startName, endName)
   local safe = M.safeTiles(session, rows, { startName, endName })
   local finish = rows[endName] or {}
+  local goal = {}
+  for _, t in ipairs(finish) do goal[key(t.dx, t.dz)] = true end
+  if goal[key(fromDx, fromDz)] then return {} end
   local centre = finish[math.ceil(#finish / 2)]
-  local distance, queue, head = {}, {}, 1
-  for _, t in ipairs(finish) do
-    distance[key(t.dx, t.dz)] = 0
-    queue[#queue + 1] = t
-  end
-  while head <= #queue do
-    local here = queue[head]
-    head = head + 1
-    local d = distance[key(here.dx, here.dz)]
-    for ox = -M.RUN_TILES, M.RUN_TILES do
-      for oz = -M.RUN_TILES, M.RUN_TILES do
-        local k = key(here.dx + ox, here.dz + oz)
-        if safe[k] and distance[k] == nil then
-          distance[k] = d + 1
-          queue[#queue + 1] = safe[k]
-        end
-      end
+  local start = { dx = fromDx, dz = fromDz }
+  local states = { { tile = start, cost = 0 } }
+  local best, open, seen = nil, { states[1] }, {}
+  while #open > 0 do
+    local at = 1
+    for i = 2, #open do
+      if open[i].cost < open[at].cost then at = i end
     end
-  end
-  local best = nil
-  for ox = -M.RUN_TILES, M.RUN_TILES do
-    for oz = -M.RUN_TILES, M.RUN_TILES do
-      local d = distance[key(fromDx + ox, fromDz + oz)]
-      if d and (not best or d < best) then best = d end
-    end
-  end
-  if distance[key(fromDx, fromDz)] == 0 then return {} end
-  if not best then return nil end
-  local path, x, z, lastX, lastZ = {}, fromDx, fromDz, nil, nil
-  local want = best
-  while want >= 0 do
-    local pick, pickScore = nil, nil
-    for ox = -M.RUN_TILES, M.RUN_TILES do
-      for oz = -M.RUN_TILES, M.RUN_TILES do
-        local k = key(x + ox, z + oz)
-        if (ox ~= 0 or oz ~= 0) and distance[k] == want then
-          local turn = (lastX and (sign(ox) ~= lastX or sign(oz) ~= lastZ)) and 1 or 0
-          local diagonal = (ox ~= 0 and oz ~= 0) and 1 or 0
-          local short = (math.max(math.abs(ox), math.abs(oz)) < M.RUN_TILES) and 1 or 0
-          local offCentre = (want == 0 and centre) and (math.abs(x + ox - centre.dx) + math.abs(z + oz - centre.dz)) or 0
-          local score = offCentre * 1000 + turn * 100 + diagonal * 10 + short
-          if not pickScore or score < pickScore then
-            pick, pickScore = safe[k], score
+    local here = table.remove(open, at)
+    local stateKey = key(here.tile.dx, here.tile.dz) .. ":" .. tostring(here.dirX) .. tostring(here.dirZ)
+    if best and here.cost >= best.cost then break end
+    if not seen[stateKey] then
+      seen[stateKey] = true
+      if here.parent and goal[key(here.tile.dx, here.tile.dz)] then
+        best = here
+      else
+        for ox = -M.RUN_TILES, M.RUN_TILES do
+          for oz = -M.RUN_TILES, M.RUN_TILES do
+            local k = key(here.tile.dx + ox, here.tile.dz + oz)
+            local tile = safe[k]
+            if tile and (ox ~= 0 or oz ~= 0) then
+              local last = goal[k] or false
+              local cost = here.cost + moveCost(ox, oz, here.dirX, here.dirZ, last)
+              if last and centre then
+                cost = cost + COST.offCentre * (math.abs(tile.dx - centre.dx) + math.abs(tile.dz - centre.dz))
+              end
+              open[#open + 1] = { tile = tile, cost = cost, parent = here, dirX = sign(ox), dirZ = sign(oz) }
+            end
           end
         end
       end
     end
-    if not pick then return nil end
-    lastX, lastZ = sign(pick.dx - x), sign(pick.dz - z)
-    path[#path + 1] = pick
-    x, z = pick.dx, pick.dz
-    want = want - 1
+  end
+  if not best then return nil end
+  local path = {}
+  local node = best
+  while node.parent do
+    table.insert(path, 1, node.tile)
+    node = node.parent
   end
   return path
 end

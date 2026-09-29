@@ -57,4 +57,32 @@ function T.every_shape_starts_next_to_its_start_row_and_ends_on_its_end_row()
   end
 end
 
+function T.timeline_counts_shape_tiles_per_frame()
+  local pattern = tiles("1,1 1,2 1,3")
+  local frames = {
+    { seconds = 1.04, tiles = { { dx = 9, dz = 9 } } },
+    { seconds = 1.6, tiles = { { dx = 1, dz = 1 }, { dx = 1, dz = 2 }, { dx = 0, dz = 0 } } },
+    { seconds = 2.1, tiles = { { dx = 1, dz = 2 }, { dx = 1, dz = 3 } } },
+  }
+  assert.eq(mazepatterns.timeline(frames, pattern, tiles("1,3")), "1.04s 0 (+0), 1.60s 2 (+2), 2.10s 1 (+0)", "timeline")
+end
+
+function T.east_south_shape_C_runs_two_tiles_until_the_last_step()
+  local maze = require("core.maze")
+  local rows = {}
+  for n, p in pairs(require("data.maze").rows) do rows[n] = maze.row(p[1], p[2]) end
+  local shape
+  for _, p in ipairs(library["east-south"]) do
+    if p.name == "C" then shape = p end
+  end
+  local route = maze.route({ lit = shape.tiles }, rows, 10, -79, "east", "south")
+  local x, z = 10, -79
+  for i, t in ipairs(route) do
+    local step = math.max(math.abs(t.dx - x), math.abs(t.dz - z))
+    if i < #route then assert.eq(step, 2, "run step " .. i .. " to " .. t.dx .. "," .. t.dz) end
+    x, z = t.dx, t.dz
+  end
+  assert.eq(#route, 10, "no slower than before")
+end
+
 return T

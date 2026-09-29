@@ -12,9 +12,8 @@ local FILE = "maze.csv"
 
 local THICKNESS = 4
 local NEAR_TILES = 6
-local BURST_DELAY_MICROSECONDS = 1200 * 1000
-local BURST_GAP_MICROSECONDS = 600 * 1000
-local BURST_FRAMES = 4
+local BURST_GAP_MICROSECONDS = 500 * 1000
+local BURST_FRAMES = 16
 local WAIT_MICROSECONDS = 3 * 1000 * 1000
 local KEEP_MICROSECONDS = 90 * 1000 * 1000
 local NEXT_FILL = { 60, 255, 120, 150 }
@@ -33,6 +32,7 @@ local pulse = { waiting = false, since = 0 }
 local burst = nil
 local triggeredAt = nil
 local triggeredLeg = nil
+local frames = {}
 local browser = nil
 local browserReady = false
 local library = {}
@@ -155,6 +155,7 @@ end
 local reset = function()
   session = maze.newSession()
   leg, route, burst, triggeredAt, triggeredLeg, lastReport = nil, nil, nil, nil, nil, nil
+  frames = {}
 end
 
 function M.legForCrystal(dx, dz)
@@ -176,7 +177,7 @@ function M.trigger(now, crystalDx, crystalDz)
   end
   reset()
   triggeredAt, triggeredLeg = now, start
-  burst = { at = now + BURST_DELAY_MICROSECONDS, left = BURST_FRAMES }
+  burst = { at = now, left = BURST_FRAMES }
   log(string.format("maze: %s crystal clicked, capturing %d frames", start, BURST_FRAMES))
   return true
 end
@@ -220,6 +221,11 @@ function M.frame(run, player, viewProj, centre, enabled, now)
     if best then
       leg.pattern = library[leg.key][best]
       log("maze: identified " .. leg.key .. " " .. why)
+      log("maze: frames after the click: " .. mazepatterns.timeline(frames, leg.pattern.tiles, ignore))
+      if burst then
+        burst = nil
+        log("maze: identified, capture stopped early")
+      end
     elseif why ~= leg.why then
       leg.why = why
       log("maze: not identified yet (" .. why .. ")")
@@ -288,6 +294,9 @@ function M.lit(text, now)
   local tiles = {}
   for dx, dz in text:gmatch("(%-?%d+),(%-?%d+)") do
     tiles[#tiles + 1] = { dx = tonumber(dx), dz = tonumber(dz) }
+  end
+  if triggeredAt then
+    frames[#frames + 1] = { seconds = (now - triggeredAt) / 1e6, tiles = tiles }
   end
   maze.observe(session, tiles)
 end

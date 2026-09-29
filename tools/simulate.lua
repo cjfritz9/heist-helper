@@ -21,6 +21,8 @@ local surface = function()
   return { clear = function() end, drawtoscreen = function() end, setalpha = function() end }
 end
 
+local silentPages = false
+
 local bolt = {
   checkversion = function() end,
   time = function() return os.clock() * 1e6 end,
@@ -46,7 +48,10 @@ local bolt = {
   onrenderparticles = function(f) handlers.particles = f end,
   createembeddedbrowser = function(x, y, w, h, url)
     local b = { url = url, sent = {} }
-    b.onmessage = function(self, f) self.message = f end
+    b.onmessage = function(self, f)
+      self.message = f
+      if url == "plugin://ui/panel.html" and not silentPages then f("ready") end
+    end
     b.onreposition = function(self, f) self.reposition = f end
     b.oncloserequest = function() end
     b.sendmessage = function(self, text) self.sent[#self.sent + 1] = text end
@@ -786,6 +791,15 @@ handlers.r3d(modelEvent(26187, 6, 11875 + 19, 4203, false))
 handlers.swap()
 handlers.r2d(chatEvent)
 print("corpse looted in section 1:", (files["objects.csv"] or ""):match("corpse,19,0[^\n]*"))
+silentPages = true
+panelBrowser.message("settings")
+local blank = handlers.browser
+for _ = 1, 400 do handlers.swap() end
+print("blank panel reopened:", blank.closed == true and handlers.browser ~= blank, "status sent to it:", #blank.sent)
+silentPages = false
+handlers.browser.message("settings")
+handlers.swap()
+print("ready panel got status:", #handlers.browser.sent > 0)
 playerPos = { 3297 * 512, 2005, 3184 * 512 }
 handlers.swap()
 print("outside vault, panel closed:", handlers.browser.closed == true)

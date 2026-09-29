@@ -61,6 +61,25 @@ function M.match(patterns, seen, ignore)
     patterns[best.index].count, margin, best.outside)
 end
 
+function M.timeline(frames, pattern, ignore)
+  local found, parts = {}, {}
+  for _, frame in ipairs(frames) do
+    local onShape, new = 0, 0
+    for _, t in ipairs(frame.tiles) do
+      local k = key(t.dx, t.dz)
+      if pattern[k] and not (ignore and ignore[k]) then
+        onShape = onShape + 1
+        if not found[k] then
+          found[k] = true
+          new = new + 1
+        end
+      end
+    end
+    parts[#parts + 1] = string.format("%.2fs %d (+%d)", frame.seconds, onShape, new)
+  end
+  return table.concat(parts, ", ")
+end
+
 function M.pattern(tiles)
   local set, count = M.set(tiles)
   return { tiles = set, count = count }

@@ -9,6 +9,8 @@ local SETTINGS_HEIGHT = 224
 local DEV_HEIGHT = 720
 local TAB_SIZE = 40
 local SEND_MICROSECONDS = 250 * 1000
+local READY_TIMEOUT_MICROSECONDS = 4 * 1000 * 1000
+local MAX_REOPENS = 3
 
 local bolt = nil
 local handlers = {}
@@ -17,6 +19,7 @@ local panel, tab = nil, nil
 local visible = false
 local lastSent, nextSend = nil, 0
 local captureWanted = false
+local ready, openedAt, reopens = false, 0, 0
 
 local saveLayout = function()
   bolt.saveconfig(LAYOUT_FILE, string.format("%d,%d,%d,%d,%d",
@@ -51,7 +54,10 @@ local setLayout = function(change)
 end
 
 function M.dispatch(message)
-  if message == "collapse" then
+  if message == "ready" then
+    ready = true
+    lastSent, nextSend = nil, 0
+  elseif message == "collapse" then
     setLayout(function() layout.expanded = false end)
   elseif message == "expand" then
     setLayout(function() layout.expanded = true end)
@@ -71,6 +77,7 @@ end
 open = function()
   closeAll()
   lastSent = nil
+  ready, openedAt = false, bolt.time()
   if layout.expanded then
     local height = (layout.dev and DEV_HEIGHT) or (layout.settings and SETTINGS_HEIGHT) or HEIGHT
     panel = bolt.createembeddedbrowser(layout.x, layout.y, WIDTH, height, "plugin://ui/panel.html")
@@ -95,6 +102,7 @@ function M.setVisible(show)
   if show == visible then return end
   visible = show
   if show then
+    reopens = 0
     open()
   else
     closeAll()
@@ -118,7 +126,15 @@ function M.devEnabled()
 end
 
 function M.update(now, status)
-  if not panel or now < nextSend then return end
+  if not panel then return end
+  if not ready then
+    if now - openedAt > READY_TIMEOUT_MICROSECONDS and reopens < MAX_REOPENS then
+      reopens = reopens + 1
+      open()
+    end
+    return
+  end
+  if now < nextSend then return end
   nextSend = now + SEND_MICROSECONDS
   status.dev = layout.dev
   status.settings = layout.settings

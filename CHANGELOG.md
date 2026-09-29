@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.12.0 (unreleased)
+## 0.12.1 (unreleased)
+
+- Maze route: no more 1-tile walk steps in the middle of a route. The route is now chosen as a whole instead of one step at a time: fewest ticks first, then fewest walk steps (a final short step onto the end row is free), then finishing near the middle of the end row, then fewest turns and diagonals. Every known shape on every leg, from every start-row tile, now runs 2 tiles a tick until the last step. On the east → south shape C that had walked from 4,-84 to 3,-84, it now runs 7,-84 → 5,-84 → 3,-84.
+- Maze capture runs longer: after a crystal click it starts capturing straight away and takes up to 16 frames 0.5 s apart (previously 4 frames 0.6 s apart, starting 1.2 s after the click). The first frame still arrives about 1 s after the click. When the maze is identified, `loot.log` gets a `maze: frames after the click:` line: for each frame, its time since the click, how many tiles of the identified shape it saw, and how many of those were new. This is to find how long the path takes to light up, which seems to go from the start barrier towards the end. The log showed the lit count still rising when the old burst ended. It stops as soon as the maze is identified, so the route also appears sooner.
+
+- Panel: loot types with nothing left are hidden in the Section and Vault blocks. When nothing is left at all, the block shows **✓ Section complete** or **✓ Vault complete** in their place. Types skipped by your level toggles count as nothing left.
+
+- Fixed: the panel sometimes opened blank (only its scroll bar showed), seen on the first vault entry after the day's first client launch. The panel page now tells the plugin when it has loaded, and only then is its state sent (anything sent earlier was lost, and an unchanged state was never re-sent). If the page doesn't check in within 4 s, the panel is reopened, up to 3 times. The page also repaints itself fully after its first state and again at 1 s and 3 s, in case an early paint never reached the screen, and its scroll bar stays hidden until dev mode asks for it.
+
+## 0.12.0
 
 - The panel shows what's left in your **current section** above the whole **Vault**.
 - Sections change at checkpoints, both ways: arrival (1), the shadow dial (3 going, 2 coming back) and markers on each side of the legionary and praetorian barriers. The current section is saved in `run.csv`. Height isn't used for sections: parts of section 2 share heights with sections 3 and 4.
