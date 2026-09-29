@@ -62,7 +62,7 @@ function M.inspect(bolt, event, playerTileX, playerTileZ)
   if not isCatalogued and not watched[count] and not isTargetSize then return end
 
   local model = event:modelmatrix()
-  local ox, _, oz = bolt.point(0, 0, 0):transform(model):get()
+  local ox, oy, oz = bolt.point(0, 0, 0):transform(model):get()
   local origin = coords.fromWorld(ox, oz)
   if playerTileX and (math.abs(origin.tileX - playerTileX) > RANGE_TILES
     or math.abs(origin.tileZ - playerTileZ) > RANGE_TILES) then
@@ -98,6 +98,7 @@ function M.inspect(bolt, event, playerTileX, playerTileZ)
     locked = locked,
     tileX = origin.tileX,
     tileZ = origin.tileZ,
+    y = oy,
     points = looted ~= true and projectPoints(bolt, event, model, count, count .. ":" .. fingerprint) or nil,
   }
 end

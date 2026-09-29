@@ -28,14 +28,22 @@ Chat needs **timestamps turned on**, and the chat box must be visible and scroll
 
 A small panel sits over the game. Drag it by its title bar, and collapse it to an **H** tab with ▾. Click the tab to reopen it, or drag it to move it.
 
-- **Status:** whether you're in the vault, the current section, chests, safes, corpses and rare chest left, rummage progress for corpses you've started, and shadow anchors powered.
-- **Powered ⇄:** marks the shadow anchor next to you as powered, or back to unpowered. Bolt can't see an anchor's powered state, so this is manual. Linked anchors are outlined in teal until their linked object changes. Unlinked anchors aren't outlined (`OUTLINE_UNLINKED_ANCHORS` in `main.lua`).
+- **Section:** chests, safes, corpses and rare chest left in the section you're in. Rummage progress shows as pips above the corpse in game. Sections follow the wiki (1 → legionary barrier → 2 → shadow dial → 3 → praetorian barrier → 4) and change at checkpoints, both ways. Arriving puts you in section 1, the shadow dial you use sets 3 (or 2 coming back), and coming within 2 tiles of a barrier marker on its floor sets that marker's section. The section is saved in `run.csv`. An object counts toward a section once its section is known, either from `data/objects.lua` or learned when you loot it (saved in `objects.csv`, only once all four barrier markers are set).
+- **Vault:** the same counts for the whole vault, and the loot split by section: gained against available for sections 1–4 (only what your level toggles allow). The section block's title shows the same for your section.
+- **⚙ Your levels:** **Thieving 102+** (safes) and **Agility 72+** (crevices), both on by default and saved to `levels.csv`. Turning one off removes what it gates from the counts and from the outlines in game.
+- Linked shadow anchors are outlined in teal until their linked object changes, which marks them powered. Anchors without a link (anchor 6) are outlined too, and marked powered when the battery stack's number changes while you're within 3 tiles of them. Pick the battery once in dev (**Pick battery**, then middle-click the batteries in your inventory, saved to `battery.csv`). Without a pick, it's learned the first time a linked anchor is powered. Bolt only sees what the game draws, so this works best with the inventory visible. Without it: if the battery count has gone down when the inventory is next drawn, the anchors you stood next to while it was hidden are marked; and clicking an anchor, then standing next to it for 3 seconds without the batteries in view, marks it too (a failed attempt would be marked as well). For linked anchors, the battery check is a fallback, since their links work without the inventory.
+- **Loot bag counter:** the bag's point total is drawn over the loot bag in your inventory and shown in the panel (**Loot N/500**). It comes from the game's "N Loot Gained" popups, each paired with a loot action that could produce that value (a corpse rummage, or a chest, safe or rare chest opening), minus 20 per catch, and hovering the bag corrects it from the tooltip's "Loot Stored: N". Popups with digits the plugin hasn't learned yet (4, 7, 8, 9) are skipped and logged.
+- The panel's height fits its content exactly: every row is always shown, with **–** until there's a value.
 - **dev** shows developer tools:
   - **Tag object**, then middle-click an object (no modifier keys) to tag it
   - **Mark tile** and **Log tile**
+  - **Section checkpoints:** one button per barrier side (legionary: section 1 and 2 sides; praetorian: section 3 and 4 sides). Stand 1–2 tiles from the barrier on that side and press it. Saved to `checkpoints.csv`. **Loot with a section** shows how many loot objects have one.
+  - **Pick battery**, then middle-click the batteries in your inventory, to set the stack watched for anchor powering. **Battery stack** shows whether it's known.
+  - **Pick loot bag**, then middle-click the loot bag, if the default doesn't match yours. `loot.log` records what the counter does (counted, ignored, reconciled, caught) and bitmaps of any popup or tooltip digit it doesn't know yet.
+  - **Map objects:** how many objects have a recorded height, and **Behind crevice ⇄**, which marks the tagged and selected chest, safe or corpse as behind a crevice (or unmarks it). Tagging works from up to 20 tiles away, so you don't need to reach the object. Marks go to `crevices.csv`, which replaces the crevice flags in `data/objects.lua` once it exists.
   - the top 3 models from the last tag, with buttons to add the selected one to the catalogue. Added models go to `catalog.csv` and are recognised straight away.
   - **Before / after check:** tag an object, **Set as before**, change its state, tag it again, **Set as after**. The panel lists every value Bolt reports for both and highlights what changed.
-  - **Watch object:** choose a centre (**Watch selected** or **Watch my tile**) and size the area with **−/+** (shown as a green square). Let it learn the background, **Open window**, trigger the change, then **Close window**. The panel lists everything on or next to it that appears or disappears, including one-frame flickers. In link step 3, **Use as after** turns a watched flicker into the link's trigger.
+  - **Watch object:** choose a centre (**Watch selected** or **Watch my tile**) and size the area with **−/+** (shown as a green square; it starts at 2 tiles around the centre). Let it learn the background, **Open window**, trigger the change, then **Close window**. The panel lists everything on or next to it that appears or disappears, including one-frame flickers. `watch.log` also gets every frame's detail changes (draw count, position, scale, matrix, texture, colour, animation pose) while the window is open. In link step 3, **Use as after** turns a watched flicker into the link's trigger.
   - **Link an anchor:** a 3-step flow that ties a shadow anchor to the object it controls. Tag the unpowered anchor, tag the object, power the anchor, tag the object again, then save. After that the anchor is marked powered automatically when its object changes. Links are saved to `links.csv`.
 
 ### Controls
@@ -63,7 +71,10 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `core/catalog.lua` | Known object models (vertex count + fingerprint) and their looted state |
 | `core/anchor.lua` | Finds each run's arrival tile from arrival or from a recognised object; vault bounds |
 | `core/runstate.lua` | Current anchor, looted corpses, chat events that change them; saved to `run.csv` |
-| `core/objectmap.lua` | Object positions relative to the arrival tile; seeded from `data/objects.lua` |
+| `core/objectmap.lua` | Object positions (relative to the arrival tile) and heights, and which are behind a crevice; seeded from `data/objects.lua` |
+| `core/checkpoints.lua` | Barrier-side markers and dial directions that set your section |
+| `data/checkpoints.lua` | Bundled checkpoint markers and which section each shadow dial leads to |
+| `core/levels.lua` | The Thieving 102 and Agility 72 toggles and what each one gates |
 | `core/probediff.lua` | Set differences and timestamped log lines, used by the recorder |
 | `game/recorder.lua` | Automatic recording around unlinked shadow anchors into `record.log` |
 | `core/recording.lua` | When the recorder starts and stops, and its snapshot format |
@@ -73,10 +84,25 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `core/compare.lua` | Field-by-field comparison for the before / after check |
 | `core/nearby.lua` | Nearest object of a kind, and teleport detection |
 | `core/watchlog.lua` | Baseline and change tracking for Watch object |
+| `game/lootcounter.lua` | The loot bag counter: reads popups, pairs them with loot actions, reconciles from the tooltip, draws the total, keeps `loot.log` |
+| `game/lootprobe.lua` | Pixel hashes and black-and-white bitmaps of 2D images |
+| `core/rollinglog.lua` | Log buffer that keeps only the most recent lines |
+| `core/lootpopups.lua` | Reads "N Loot Gained" popups from glyph images and counts each once as it rises |
+| `data/popupfont.lua` | Pixel hash → character for the popup font |
+| `core/tooltip.lua` | Reads "Loot Stored: N" from the loot bag's tooltip, for reconciliation |
+| `data/tooltipfont.lua` | Pixel hash → character for the tooltip font |
+| `core/digitfont.lua` | Tiny outlined pixel font rendered to RGBA |
+| `gfx/lootoverlay.lua` | Draws the bag total over the loot bag icon |
+| `data/icons.lua` | Default inventory icon identities for the battery and the loot bag |
+| `core/popups.lua` | The screen areas read around the character and around the mouse |
+| `core/anchorclick.lua` | Click fallback: an anchor clicked and then stood next to with no batteries in view |
+| `core/stacklabels.lua` | Stack numbers over inventory icons (as atlas glyph positions), their changes, and learning which icon is the battery |
+| `game/inventory.lua` | Collects inventory icons and small 2D glyphs each frame |
+| `core/watchdetail.lua` | Per-frame detail for Watch object (draw count, position, scale, matrix, texture, colour, pose) and what changed |
 | `game/watch.lua` | Records models, particles and billboards around the watched tile |
 | `gfx/area.lua` | Draws the Watch object area on the ground |
 | `core/json.lua` | Minimal JSON encoder for panel status messages |
-| `core/status.lua` | Builds the panel's status (section, what's left, progress) |
+| `core/status.lua` | Builds the panel's status: what's left in your section and the vault, progress, object mapping coverage |
 | `game/panel.lua` | Opens the panel or tab, remembers its position, passes button presses to their actions |
 | `ui/panel.html`, `ui/tab.html` | The panel and its collapsed tab |
 | `core/pips.lua` | Layout of the rummage-progress pips |

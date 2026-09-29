@@ -1,57 +1,87 @@
 local runstate = require("core.runstate")
+local objectmap = require("core.objectmap")
+local levels = require("core.levels")
 
 local M = {}
 
-local SECTION_HEIGHTS = {
-  { section = 1, height = 4933 },
-  { section = 2, height = 2949 },
-  { section = 3, height = 258 },
-  { section = 4, height = 2179 },
-}
-local SECTION_TOLERANCE = 200
+M.LOOT_KINDS = { chest = true, safe = true, rareChest = true, corpse = true }
+M.POINTS = { corpse = 10, chest = 10, safe = 30, rareChest = 50 }
+M.SHADOW_POINTS = 15
+M.SECTIONS = 4
 
-function M.section(height)
-  local best, bestDistance = nil, SECTION_TOLERANCE + 1
-  for _, s in ipairs(SECTION_HEIGHTS) do
-    local distance = math.abs(height - s.height)
-    if distance < bestDistance then
-      best, bestDistance = s.section, distance
-    end
-  end
-  return best
+function M.points(o)
+  if o.kind == "chest" and o.shadow then return M.SHADOW_POINTS end
+  return M.POINTS[o.kind] or 0
 end
 
-function M.build(run, objects, playerHeight)
-  local remaining = { chest = 0, safe = 0, rareChest = 0, corpse = 0 }
-  local corpses = {}
-  local anchors = { powered = 0, total = 0 }
+local splits = function(run, map, playerLevels)
+  local out = {}
+  for s = 1, M.SECTIONS do
+    out[s] = { section = s, gained = run.sectionLoot and run.sectionLoot[s] or 0, potential = 0 }
+  end
+  for _, o in ipairs(map.list) do
+    local split = o.section and out[o.section]
+    if split and M.LOOT_KINDS[o.kind]
+      and levels.canLoot(playerLevels, o.kind, objectmap.behindCrevice(map, o.dx, o.dz)) then
+      split.potential = split.potential + M.points(o)
+    end
+  end
+  return out
+end
+
+local emptyCounts = function()
+  return { chest = 0, safe = 0, rareChest = 0, corpse = 0 }
+end
+
+local isLeft = function(run, o)
+  if o.kind == "corpse" then
+    return not runstate.isCorpseLooted(run, o.dx, o.dz)
+  end
+  return not runstate.isObjectLooted(run, o.kind, o.dx, o.dz)
+end
+
+function M.build(run, map, section, playerLevels)
+  local total = emptyCounts()
+  local current = section and emptyCounts() or nil
   if run.anchor then
-    for _, o in ipairs(objects) do
-      if o.kind == "corpse" then
-        if not runstate.isCorpseLooted(run, o.dx, o.dz) then
-          remaining.corpse = remaining.corpse + 1
-          local done = runstate.rummageCount(run, o.dx, o.dz)
-          if done > 0 then
-            corpses[#corpses + 1] = { done = done, total = runstate.RUMMAGES_PER_CORPSE }
-          end
+    for _, o in ipairs(map.list) do
+      if M.LOOT_KINDS[o.kind] and isLeft(run, o)
+        and levels.canLoot(playerLevels, o.kind, objectmap.behindCrevice(map, o.dx, o.dz)) then
+        local here = current ~= nil and o.section == section
+        total[o.kind] = total[o.kind] + 1
+        if here then
+          current[o.kind] = current[o.kind] + 1
         end
-      elseif o.kind == "shadowAnchor" then
-        anchors.total = anchors.total + 1
-        if runstate.isAnchorPowered(run, o.dx, o.dz) then
-          anchors.powered = anchors.powered + 1
-        end
-      elseif remaining[o.kind] and not runstate.isObjectLooted(run, o.kind, o.dx, o.dz) then
-        remaining[o.kind] = remaining[o.kind] + 1
       end
     end
   end
   return {
     anchored = run.anchor ~= nil,
-    section = playerHeight and M.section(playerHeight) or nil,
-    remaining = remaining,
-    corpses = corpses,
-    anchors = anchors,
+    section = section,
+    current = run.anchor and current or nil,
+    total = total,
+    splits = run.anchor and splits(run, map, playerLevels) or nil,
+    levels = playerLevels,
   }
+end
+
+function M.mapping(map)
+  local withHeight, loot, withSection, crevices = 0, 0, 0, {}
+  for _, o in ipairs(map.list) do
+    if o.y then
+      withHeight = withHeight + 1
+    end
+    if M.LOOT_KINDS[o.kind] then
+      loot = loot + 1
+      if o.section then
+        withSection = withSection + 1
+      end
+    end
+    if objectmap.behindCrevice(map, o.dx, o.dz) then
+      crevices[#crevices + 1] = { kind = o.kind, dx = o.dx, dz = o.dz }
+    end
+  end
+  return { withHeight = withHeight, total = #map.list, withSection = withSection, loot = loot, crevices = crevices }
 end
 
 return M

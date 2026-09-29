@@ -55,6 +55,8 @@ local bolt = {
     return b
   end,
   onrenderbillboard = function(f) handlers.billboard = f end,
+  onrendericon = function(f) handlers.icon = f end,
+  onmousemotion = function(f) handlers.motion = f end,
 }
 package.loaded.bolt = bolt
 
@@ -65,7 +67,14 @@ local modelEvent = function(vertices, fingerprintSeed, tileX, tileZ, animated)
   end
   return {
     vertexcount = function() return vertices end,
-    modelmatrix = function() return translate end,
+    modelmatrix = function()
+      return setmetatable({
+        get = function() return 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tileX * 512, 0, tileZ * 512, 1 end,
+      }, { __call = function(_, p) return translate(p) end })
+    end,
+    vertexanimation = function()
+      return { get = function() return 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 end }
+    end,
     viewprojmatrix = function() return function(p) return p end end,
     vertexpoint = function(_, i) return point(i, fingerprintSeed, i * 2) end,
     animated = function() return animated end,
@@ -99,8 +108,36 @@ local chatEvent = {
   verticesperimage = function() return 6 end,
   vertexcount = function() return 6 end,
   vertexatlasdetails = function() return 0, 0, 11, 11 end,
+  vertexscaledxy = function() return 0, 0 end,
+  vertexcolour = function() return 1, 1, 1, 1 end,
+  texturedata = function(_, _, _, n) return string.rep("a", n) end,
   texturecompare = function(_, _, _, data) return data == ROW end,
 }
+local iconEvent = function(vertices, x, y)
+  return {
+    xywh = function() return x, y, 32, 32 end,
+    modelcount = function() return 1 end,
+    modelvertexcount = function() return vertices end,
+    modelvertexpoint = function(_, _, i) return point(i, vertices, 0) end,
+  }
+end
+local stackEvent = function(x, y, atlasXs)
+  return {
+    verticesperimage = function() return 6 end,
+    vertexcount = function() return 6 * #atlasXs end,
+    vertexatlasdetails = function(_, i) return atlasXs[math.floor((i - 1) / 6) + 1], 900, 7, 10 end,
+    vertexscaledxy = function(_, i) local n = math.floor((i - 1) / 6); return x + 2 + n * 7 + (i % 2) * 6, y + 2 + (i % 3) * 4 end,
+    texturecompare = function() return false end,
+    vertexcolour = function() return 1, 1, 0, 1 end,
+    texturedata = function(_, x, _, n) return string.rep(string.char(x % 256), n) end,
+  }
+end
+local showInventory = function(batteryDigits, coinDigits)
+  handlers.icon(iconEvent(120, 1700, 800))
+  handlers.r2d(stackEvent(1700, 800, batteryDigits))
+  handlers.icon(iconEvent(80, 1740, 800))
+  handlers.r2d(stackEvent(1740, 800, coinDigits))
+end
 local objectDraw = require("gfx.objects")
 local realDraw = objectDraw.draw
 lastHighlighted = {}
@@ -155,6 +192,30 @@ local frameWithCorpse = function()
 end
 frameWithCorpse()
 print("new run, corpse:", table.concat(lastHighlighted, " "))
+local tagCorpse = function()
+  handlers.browser.message("tag")
+  handlers.mouse({ button = function() return 3 end, ctrl = function() return false end,
+    shift = function() return false end, alt = function() return false end, xy = function() return 100, 200 end })
+  handlers.swap()
+  handlers.r3d(modelEvent(26187, 6, 11875 + 8, 4203 + 4, false))
+  handlers.swap()
+end
+handlers.browser.message("crevice:1")
+print("crevice without a tag, crevices.csv:", files["crevices.csv"])
+tagCorpse()
+handlers.browser.message("crevice:1")
+print("crevices.csv:", files["crevices.csv"])
+handlers.browser.message("level:agility")
+frameWithCorpse()
+print("agility off, corpse behind crevice:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+print("levels.csv:", (files["levels.csv"] or ""):gsub("\n", " "))
+handlers.browser.message("level:agility")
+handlers.browser.message("crevice:1")
+frameWithCorpse()
+print("agility on, crevice cleared:", table.concat(lastHighlighted, " "))
+handlers.browser.message("settings")
+print("settings open:", files["panel.csv"])
+handlers.browser.message("settings")
 for i = 1, 4 do
   chatQueue = { "[23:30:0" .. i .. "]Youlootacopperquadranscoin." }
   handlers.r2d(chatEvent)
@@ -208,11 +269,7 @@ print("new corpse now highlighted:", table.concat(lastHighlighted, " "))
 playerPos = { (anchorX + 1) * 512, 2181, anchorZ * 512 }
 handlers.r3d(modelEvent(4506, 9, anchorX, anchorZ, false))
 handlers.swap()
-print("anchor before toggle:", table.concat(lastHighlighted, " "))
-panelBrowser.message("anchor")
-handlers.r3d(modelEvent(4506, 9, anchorX, anchorZ, false))
-handlers.swap()
-print("anchor after toggle:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+print("objects.csv heights:", files["objects.csv"])
 print("last status:", panelBrowser.sent[#panelBrowser.sent])
 
 local runFile = function() return files["run.csv"] or "" end
@@ -228,8 +285,6 @@ runstate = require("core.runstate")
 files["run.csv"] = nil
 local objX, objZ = anchorX + 5, anchorZ + 3
 playerPos = { (anchorX + 1) * 512, 2181, anchorZ * 512 }
-panelBrowser.message("anchor")
-print("anchor unpowered again:", not runFile():find("powered"))
 panelBrowser.message("link:start")
 tagModel(4506, 9, anchorX, anchorZ)
 panelBrowser.message("link:anchor:1")
@@ -245,10 +300,14 @@ handlers.r3d(modelEvent(4506, 9, anchorX, anchorZ, false))
 handlers.r3d(modelEvent(900, 11, objX, objZ, false))
 handlers.swap()
 print("object in before state, highlighted:", table.concat(lastHighlighted, " "))
+showInventory({ 10, 30 }, { 50 })
+handlers.swap()
+showInventory({ 20, 30 }, { 50 })
 handlers.r3d(modelEvent(4506, 9, anchorX, anchorZ, false))
 handlers.r3d(modelEvent(950, 12, objX, objZ, false))
 handlers.swap()
 print("object in after state, highlighted:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+print("battery.csv:", files["battery.csv"])
 print("run.csv:", runFile())
 
 tagModel(3444, 21, objX, objZ)
@@ -277,11 +336,13 @@ handlers.swap()
 handlers.r3d(modelEvent(684, 13, partnerX, partnerZ, false))
 handlers.swap()
 print("after teleport, partner highlighted:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+print("section after the dial:", (files["run.csv"] or ""):match("section,(%d+)"))
 playerPos = { (dialX + 1) * 512, 2949, dialZ * 512 }
 handlers.swap()
 handlers.r3d(modelEvent(684, 13, dialX, dialZ, false))
 handlers.swap()
 print("back at first dial, highlighted:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+print("section after dialling back:", (files["run.csv"] or ""):match("section,(%d+)"))
 
 playerPos = { (objX + 1) * 512, 2181, objZ * 512 }
 tagModel(777, 31, objX, objZ)
@@ -292,7 +353,7 @@ handlers.swap()
 print("selected, model out of view:", "[" .. table.concat(lastHighlighted, " ") .. "]")
 
 local crystalX, crystalZ = anchorX - 11, anchorZ - 1
-local anchor6X, anchor6Z = anchorX, anchorZ
+local anchor6X, anchor6Z = anchorX - 4, anchorZ
 playerPos = { (crystalX + 2) * 512, 2181, crystalZ * 512 }
 local frameWith = function(animated)
   handlers.r3d(modelEvent(4506, 9, anchor6X, anchor6Z, false))
@@ -317,9 +378,6 @@ panelBrowser.message("watch:use:2")
 panelBrowser.message("link:save")
 panelBrowser.message("watch:close")
 print("saved link:", files["links.csv"]:match("[^\n]*2004[^\n]*"))
-playerPos = { (anchor6X + 1) * 512, 2181, anchor6Z * 512 }
-frameWith(false)
-panelBrowser.message("anchor")
 playerPos = { (crystalX + 2) * 512, 2181, crystalZ * 512 }
 frameWith(false)
 print("crystal steady, anchor outlined:", table.concat(lastHighlighted, " "))
@@ -327,6 +385,27 @@ frameWith(true)
 frameWith(false)
 print("after flicker, anchor outlined:", "[" .. table.concat(lastHighlighted, " ") .. "]")
 
+panelBrowser.message("watch:clear")
+playerPos = { (crystalX + 2) * 512, 2181, crystalZ * 512 }
+tagModel(2004, 41, crystalX, crystalZ)
+panelBrowser.message("watch:start:1")
+local drawCrystal = function(times)
+  for _ = 1, times do handlers.r3d(modelEvent(2004, 41, crystalX, crystalZ, false)) end
+  handlers.swap()
+end
+for _ = 1, 50 do drawCrystal(1) end
+panelBrowser.message("watch:arm")
+for _ = 1, 3 do drawCrystal(1) end
+for _ = 1, 2 do drawCrystal(2) end
+for _ = 1, 3 do drawCrystal(1) end
+panelBrowser.message("watch:close")
+bolt.time = function() clock = clock + 2e6; return clock end
+handlers.swap()
+bolt.time = function() clock = clock + 1000; return clock end
+print("double draw in watch.log:")
+for line in (files["watch.log"] or ""):gmatch("[^\n]+") do
+  if line:find("~ ") or line:find("detail variants") then print("  " .. line) end
+end
 panelBrowser.message("watch:here")
 panelBrowser.message("watch:radius:+")
 panelBrowser.message("watch:radius:+")
@@ -335,6 +414,255 @@ local w = require("game.watch").area()
 print("watch here, radius:", w and w.radius, w and (w.tileX .. "," .. w.tileZ))
 panelBrowser.message("watch:clear")
 print("cleared:", require("game.watch").area() == nil)
+local spareX, spareZ = 11875 + 20, 4203 - 20
+playerPos = { (spareX + 1) * 512, 2181, spareZ * 512 }
+local spareFrame = function(batteryDigits, coinDigits)
+  showInventory(batteryDigits, coinDigits)
+  handlers.r3d(modelEvent(4506, 9, spareX, spareZ, false))
+  handlers.swap()
+end
+local middleClick = function(x, y)
+  handlers.mouse({ button = function() return 3 end, ctrl = function() return false end,
+    shift = function() return false end, alt = function() return false end, xy = function() return x, y end })
+end
+spareFrame({ 20, 30 }, { 50 })
+panelBrowser.message("battery")
+middleClick(1745, 810)
+print("picked coins by mistake, battery.csv:", files["battery.csv"])
+panelBrowser.message("battery")
+middleClick(10, 10)
+print("missed every icon, battery.csv unchanged:", files["battery.csv"])
+panelBrowser.message("battery")
+middleClick(1705, 810)
+print("picked batteries, battery.csv:", files["battery.csv"])
+spareFrame({ 20, 30 }, { 50 })
+print("unpowered anchor outlined:", table.concat(lastHighlighted, " "))
+spareFrame({ 20, 30 }, { 60 })
+print("coins changed, anchor still outlined:", table.concat(lastHighlighted, " "))
+handlers.motion({ xy = function() return 1710, 812 end })
+spareFrame({ 20, 30, 70 }, { 60 })
+spareFrame({ 20, 30 }, { 60 })
+print("tooltip over batteries, anchor still outlined:", table.concat(lastHighlighted, " "))
+handlers.motion({ xy = function() return 500, 500 end })
+bolt.time = function() clock = clock + 2e6; return clock end
+spareFrame({ 20, 30 }, { 60 })
+bolt.time = function() clock = clock + 1000; return clock end
+spareFrame({ 10, 30 }, { 60 })
+spareFrame({ 10, 30 }, { 60 })
+clock = clock + 2.5e6
+spareFrame({ 10, 30 }, { 60 })
+print("battery used, anchor outlined:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+local lastX, lastZ = spareX, spareZ - 6
+playerPos = { (lastX + 1) * 512, 2181, lastZ * 512 }
+local lastAnchorFrame = function(withBattery)
+  if withBattery then
+    handlers.icon(iconEvent(120, 1700, 800))
+    handlers.r2d(stackEvent(1700, 800, { 10, 30 }))
+  end
+  handlers.icon(iconEvent(80, 1740, 800))
+  handlers.r2d(stackEvent(1740, 800, { 60 }))
+  handlers.r3d(modelEvent(4506, 9, lastX, lastZ, false))
+  handlers.swap()
+end
+lastAnchorFrame(true)
+lastAnchorFrame(true)
+print("last anchor outlined:", table.concat(lastHighlighted, " "))
+lastAnchorFrame(false)
+lastAnchorFrame(false)
+clock = clock + 2.5e6
+lastAnchorFrame(false)
+print("last batteries used up, anchor outlined:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+local popupFrame = function(digits)
+  handlers.icon(iconEvent(120, 1700, 800))
+  handlers.r2d(stackEvent(1700, 800, { 30 }))
+  handlers.icon(iconEvent(200, 1700, 840))
+  handlers.r2d(stackEvent(1700, 840, {}))
+  if digits then handlers.r2d(stackEvent(98, 150, digits)) end
+  handlers.r3d(modelEvent(4506, 9, spareX, spareZ, false))
+  handlers.swap()
+end
+popupFrame()
+popupFrame({ 101, 102 })
+popupFrame({ 101, 102 })
+popupFrame()
+panelBrowser.message("lootbag")
+middleClick(1705, 850)
+handlers.motion({ xy = function() return 1710, 850 end })
+popupFrame()
+handlers.r2d(stackEvent(1720, 870, { 201, 202, 203 }))
+popupFrame()
+handlers.motion({ xy = function() return 500, 500 end })
+popupFrame()
+bolt.time = function() clock = clock + 3e6; return clock end
+handlers.swap()
+bolt.time = function() clock = clock + 1000; return clock end
+print("lootbag.csv:", files["lootbag.csv"])
+local font = require("data.popupfont")
+local lootprobe = require("game.lootprobe")
+local glyphEvent = function(atlasXs, x, y)
+  return {
+    verticesperimage = function() return 6 end,
+    vertexcount = function() return 6 * #atlasXs end,
+    vertexatlasdetails = function(_, i) return atlasXs[math.floor((i - 1) / 6) + 1], 700, 16, 34 end,
+    vertexscaledxy = function(_, i) local n = math.floor((i - 1) / 6); return x + n * 16 + (i % 2) * 14, y + (i % 3) * 15 end,
+    vertexcolour = function() return 1, 1, 1, 1 end,
+    texturedata = function(_, ax, _, n) return string.rep(string.char(ax % 256), n) end,
+    texturecompare = function() return false end,
+  }
+end
+local atlasOf = {}
+for i, c in ipairs({ "1", "0", "2", "L", "o", "t", "G", "a", "i", "n", "e", "d" }) do
+  atlasOf[c] = 600 + i * 3
+  font[lootprobe.pixelHash(glyphEvent({}, 0, 0), atlasOf[c], 700, 16, 34)] = c
+end
+local popupLine = function(text, y)
+  local xs = {}
+  for i = 1, #text do xs[i] = atlasOf[text:sub(i, i)] or 999 end
+  return glyphEvent(xs, 20, y)
+end
+local lootNow = function() return tonumber(("\n" .. (files["run.csv"] or "")):match("\nloot,(%d+)")) or 0 end
+local lootLines = 0
+local lootLine = function()
+  lootLines = lootLines + 1
+  chatQueue = { string.format("[23:45:%02d]Youlootacopperquadranscoin.", lootLines) }
+  clock = clock + 0.6e6
+  handlers.r2d(chatEvent)
+end
+local playerTile = function() return math.floor(playerPos[1] / 512), math.floor(playerPos[3] / 512) end
+local chestsOpened = 0
+local openChest = function()
+  local px, pz = playerTile()
+  chestsOpened = chestsOpened + 1
+  handlers.r3d(modelEvent(3264, 2, px - 2, pz - chestsOpened, false))
+end
+local lootFrame = function(...)
+  local px, pz = playerTile()
+  handlers.r3d(modelEvent(26187, 6, px + 1, pz, false))
+  for _, e in ipairs({ ... }) do handlers.r2d(e) end
+  handlers.swap()
+end
+local settle = function()
+  clock = clock + 1.2e6
+  lootFrame()
+end
+local before = lootNow()
+lootFrame(popupLine("LootGained", 150))
+openChest()
+lootFrame(popupLine("10LootGained", 150))
+lootFrame(popupLine("10LootGained", 145))
+lootFrame()
+lootFrame(popupLine("10LootGained", 140))
+settle()
+print("chest popup counted once:", lootNow() - before)
+lootFrame(popupLine("Gained", 150))
+lootLine()
+lootFrame(popupLine("2LootGained", 150))
+lootLine()
+lootFrame(popupLine("2LootGained", 141), popupLine("Gained", 150))
+lootFrame(popupLine("2LootGained", 140), popupLine("2LootGained", 150))
+lootFrame(popupLine("2LootGained", 135), popupLine("2LootGained", 145))
+settle()
+print("two rummage popups on top of that:", lootNow() - before)
+for i = 1, 8 do lootFrame(popupLine("2LootGained", 130 - i * 20)) end
+settle()
+settle()
+print("popup flying off, not recounted:", lootNow() - before)
+chatQueue = { "[23:50:00]Youhavebeencaught...Youlosesomeloot." }
+clock = clock + 0.6e6
+handlers.r2d(chatEvent)
+print("after a catch:", lootNow() - before)
+local tipFont = require("data.tooltipfont")
+local tipEvent = function(text, x, y)
+  local xs = {}
+  for i = 1, #text do xs[i] = 800 + text:byte(i) end
+  return {
+    verticesperimage = function() return 6 end,
+    vertexcount = function() return 6 * #xs end,
+    vertexatlasdetails = function(_, i) return xs[math.floor((i - 1) / 6) + 1], 900, 8, 10 end,
+    vertexscaledxy = function(_, i) local n = math.floor((i - 1) / 6); return x + n * 8 + (i % 2) * 6, y + (i % 3) * 4 end,
+    vertexcolour = function() return 227 / 255, 215 / 255, 207 / 255, 1 end,
+    texturedata = function(_, ax, _, n) return string.rep(string.char(ax % 256), n) end,
+    texturecompare = function() return false end,
+  }
+end
+for c in ("LootStored:0123456789"):gmatch(".") do
+  tipFont[lootprobe.pixelHash(tipEvent("", 0, 0), 800 + c:byte(), 900, 8, 10)] = c
+end
+handlers.motion({ xy = function() return 1710, 850 end })
+for _ = 1, 3 do
+  handlers.r2d(tipEvent("LootStored:235", 1720, 880))
+  popupFrame()
+end
+handlers.motion({ xy = function() return 500, 500 end })
+clock = clock + 2e6
+print("bag hovered, counter reconciled to:", lootNow())
+local hiddenX, hiddenZ = 11875 - 20, 4203 - 40
+local hiddenFrame = function(inventoryShown, digits)
+  if inventoryShown then
+    handlers.icon(iconEvent(120, 1700, 800))
+    handlers.r2d(stackEvent(1700, 800, digits))
+    handlers.icon(iconEvent(80, 1740, 800))
+    handlers.r2d(stackEvent(1740, 800, { 60 }))
+  end
+  handlers.r3d(modelEvent(4506, 9, hiddenX, hiddenZ, false))
+  handlers.swap()
+end
+playerPos = { (hiddenX + 1) * 512, 2181, hiddenZ * 512 }
+hiddenFrame(true, { 30 })
+hiddenFrame(true, { 30 })
+hiddenFrame(false)
+hiddenFrame(false)
+playerPos = { (hiddenX + 12) * 512, 2181, hiddenZ * 512 }
+hiddenFrame(false)
+print("powered with inventory hidden, still outlined:", table.concat(lastHighlighted, " "))
+hiddenFrame(true, { 20 })
+hiddenFrame(true, { 20 })
+clock = clock + 2.5e6
+hiddenFrame(true, { 20 })
+print("inventory reopened later, anchor outlined:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+
+local clickX, clickZ = 11875 - 30, 4203 - 50
+local clickFrame = function()
+  handlers.r3d(modelEvent(4506, 9, clickX, clickZ, false))
+  handlers.swap()
+end
+playerPos = { (clickX + 8) * 512, 2181, clickZ * 512 }
+clickFrame()
+handlers.mouse({ button = function() return 1 end, xy = function() return 103, 202 end })
+playerPos = { (clickX + 1) * 512, 2181, clickZ * 512 }
+bolt.time = function() clock = clock + 1e4; return clock end
+clickFrame()
+clickFrame()
+print("clicked, just arrived, still outlined:", table.concat(lastHighlighted, " "))
+for _ = 1, 60 do clickFrame() end
+print("clicked with no batteries in view, anchor outlined:", "[" .. table.concat(lastHighlighted, " ") .. "]")
+local nearX, nearZ = 11875 - 30, 4203 - 70
+playerPos = { (nearX + 1) * 512, 2181, (nearZ - 2) * 512 }
+local chestFrame = function(opened, digits)
+  handlers.icon(iconEvent(120, 1700, 800))
+  handlers.r2d(stackEvent(1700, 800, digits))
+  handlers.icon(iconEvent(80, 1740, 800))
+  handlers.r2d(stackEvent(1740, 800, { 60 }))
+  handlers.r3d(modelEvent(4506, 9, nearX, nearZ, false))
+  handlers.r3d(modelEvent(opened and 3264 or 3444, opened and 2 or 1, nearX, nearZ - 3, false))
+  handlers.swap()
+end
+chestFrame(false, { 10 })
+chestFrame(false, { 10 })
+chestFrame(false, { 10, 30 })
+chestFrame(true, { 10, 30 })
+clock = clock + 2.5e6
+chestFrame(true, { 10, 30 })
+print("batteries arriving just before the chest opens, anchor outlined:", table.concat(lastHighlighted, " "))
+bolt.time = function() clock = clock + 3e6; return clock end
+handlers.swap()
+bolt.time = function() clock = clock + 1000; return clock end
+print("inventory.log tail:\n" .. ((files["inventory.log"] or ""):match("[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*\n[^\n]*\n$") or ""))
+bolt.time = function() clock = clock + 1000; return clock end
+bolt.time = function() clock = clock + 2e6; return clock end
+handlers.swap()
+bolt.time = function() clock = clock + 1000; return clock end
+print("inventory.log:\n" .. (files["inventory.log"] or "<none>"))
 local a6x, a6z = 11875 + 5, 4203 - 94
 local cx, cz = 11875 - 6, 4203 - 95
 playerPos = { (a6x + 1) * 512, 2181, a6z * 512 }
@@ -355,6 +683,42 @@ print("record.log lines:", #lines)
 for i = 1, #lines do
   if lines[i]:find("recording") or lines[i]:find("2004") then print("  " .. lines[i]) end
 end
+local sectionNow = function() return (files["run.csv"] or ""):match("section,(%d+)") end
+playerPos = { (11875 - 10) * 512, 256, (4203 - 43) * 512 }
+handlers.swap()
+local looted = select(2, (files["run.csv"] or ""):gsub("looted", ""))
+playerPos = { 11875 * 512, 4933, 4203 * 512 }
+handlers.swap()
+print("caught and sent back, looted kept:", select(2, (files["run.csv"] or ""):gsub("looted", "")) == looted and looted > 0,
+  "section:", sectionNow())
+local standAt = function(dx, dz, y)
+  playerPos = { (11875 + dx) * 512, y, (4203 + dz) * 512 }
+  handlers.swap()
+end
+standAt(10, -8, 4933)
+panelBrowser.message("checkpoint:legionary1")
+standAt(10, -12, 2949)
+panelBrowser.message("checkpoint:legionary2")
+standAt(0, -50, 2179)
+panelBrowser.message("checkpoint:praetorian3")
+standAt(0, -53, 2179)
+panelBrowser.message("checkpoint:praetorian4")
+print("checkpoints.csv:", (files["checkpoints.csv"] or ""):gsub("\n", " "))
+standAt(11, -9, 4933)
+print("walked back past the legionary barrier:", sectionNow())
+standAt(10, -13, 2949)
+print("through it again:", sectionNow())
+standAt(0, -49, 2179)
+print("praetorian, section 3 side:", sectionNow())
+standAt(0, -54, 2179)
+print("praetorian, section 4 side:", sectionNow())
+standAt(11, -9, 4933)
+standAt(19, 1, 4933)
+chatQueue = { "[23:40:01]Youlootacopperquadranscoin." }
+handlers.r3d(modelEvent(26187, 6, 11875 + 19, 4203, false))
+handlers.swap()
+handlers.r2d(chatEvent)
+print("corpse looted in section 1:", (files["objects.csv"] or ""):match("corpse,19,0[^\n]*"))
 playerPos = { 3297 * 512, 2005, 3184 * 512 }
 handlers.swap()
 print("outside vault, panel closed:", handlers.browser.closed == true)

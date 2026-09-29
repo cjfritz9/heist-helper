@@ -10,8 +10,8 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow-x: hidden;
     font: 12px/1.35 "Segoe UI", sans-serif; user-select: none; }
-  header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: var(--panel);
-    border-bottom: 1px solid var(--line); cursor: move; }
+  header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 6px;
+    background: var(--panel); border-bottom: 1px solid var(--line); cursor: move; }
   header h1 { flex: 1; margin: 0; font-size: 13px; color: var(--gold); }
   header button { cursor: pointer; }
   button { background: #2e261c; color: var(--text); border: 1px solid var(--line); border-radius: 3px;
@@ -19,14 +19,23 @@
   button:hover { background: #3a2f22; }
   button.on { border-color: var(--gold); color: var(--gold); }
   section { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  section.block { padding: 5px 8px; }
+  .title { display: flex; justify-content: space-between; align-items: center; height: 16px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--gold); }
+  .title.muted { color: var(--muted); }
+  .block .counts { height: 18px; line-height: 18px; flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+  .toggle { display: flex; align-items: center; gap: 6px; height: 20px; cursor: pointer; }
+  .loot { color: var(--text); text-transform: none; letter-spacing: 0; }
+  .block .counts.split { gap: 7px; font-size: 11px; }
+  .split span { color: var(--muted); } .split b { color: var(--text); font-weight: 600; }
+  .split span.here b { color: var(--gold); }
+  .toggle input { margin: 0; }
   .row { display: flex; justify-content: space-between; gap: 8px; margin: 2px 0; }
   .muted { color: var(--muted); }
   .counts { display: flex; gap: 10px; flex-wrap: wrap; }
   .counts b { font-weight: 600; }
   .chest { color: var(--chest); } .safe { color: var(--safe); } .corpse { color: var(--corpse); }
   .anchor { color: var(--anchor); } .rare { color: var(--rare); }
-  .pips span { display: inline-block; width: 8px; height: 8px; margin-right: 2px; background: #5a4630; }
-  .pips span.done { background: var(--corpse); }
   .buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
   .candidate { display: flex; gap: 6px; align-items: center; margin: 2px 0; cursor: pointer; }
   .candidate input { margin: 0; }
@@ -51,23 +60,26 @@
 <body>
 <header id="drag">
   <h1>Heist Helper</h1>
+  <button id="settingsToggle" title="Your levels">⚙</button>
   <button id="devToggle" title="Show developer tools">dev</button>
   <button id="collapse" title="Collapse to a small tab">▾</button>
 </header>
 
-<section>
-  <div class="row"><span id="anchorState" class="muted">Waiting for vault…</span><span id="section"></span></div>
-  <div class="counts">
-    <span class="chest">Chests <b id="chest">–</b></span>
-    <span class="safe">Safes <b id="safe">–</b></span>
-    <span class="corpse">Corpses <b id="corpse">–</b></span>
-    <span class="rare">Rare <b id="rareChest">–</b></span>
-  </div>
-  <div id="corpseProgress"></div>
-  <div class="row">
-    <span class="anchor">Anchors powered <b id="anchors">–</b></span>
-    <button id="anchorToggle" title="Mark the shadow anchor next to you as powered (or unpowered)">Powered ⇄</button>
-  </div>
+<section class="block">
+  <div class="title"><span id="sectionTitle">Section –</span><span id="sectionLoot" class="loot">–</span></div>
+  <div class="counts" id="currentCounts"></div>
+</section>
+
+<section class="block">
+  <div class="title muted"><span>Vault</span><span>Loot <b id="bagTotal">–</b></span></div>
+  <div class="counts" id="totalCounts"></div>
+  <div class="counts split" id="splitRow"></div>
+</section>
+
+<section class="block" id="settings" hidden>
+  <div class="title muted">Your levels</div>
+  <label class="toggle"><input type="checkbox" id="levelThieving"> Thieving 102+ <span class="muted">(safes)</span></label>
+  <label class="toggle"><input type="checkbox" id="levelAgility"> Agility 72+ <span class="muted">(crevices)</span></label>
 </section>
 
 <section id="dev" hidden>
@@ -88,6 +100,29 @@
     <button data-kind="anchor" class="anchor">+ anchor</button>
   </div>
 
+  <div class="subhead">Section checkpoints</div>
+  <div class="muted">Stand 1–2 tiles from the barrier on that side, then press its button. Near a marker, your section becomes the marker's section; the shadow dial works by itself.</div>
+  <div class="buttons" id="checkpointButtons">
+    <button data-checkpoint="legionary1">Legionary · section 1 side</button>
+    <button data-checkpoint="legionary2">Legionary · section 2 side</button>
+    <button data-checkpoint="praetorian3">Praetorian · section 3 side</button>
+    <button data-checkpoint="praetorian4">Praetorian · section 4 side</button>
+  </div>
+  <div class="row"><span>Loot with a section</span><b id="mapSections">–</b></div>
+
+  <div class="subhead">Map objects</div>
+  <div class="row"><span>Heights recorded</span><b id="mapHeights">–</b></div>
+  <div class="row"><span>Battery stack</span><b id="mapBattery">–</b></div>
+  <div class="row"><span>Loot bag</span><b id="mapLootBag">–</b></div>
+  <div class="buttons">
+    <button id="batteryPick" title="Then middle-click the batteries in your inventory">Pick battery</button>
+    <button id="lootBagPick" title="Then middle-click the loot bag in your inventory">Pick loot bag</button>
+  </div>
+  <div id="pickHint" class="muted" hidden></div>
+  <div class="muted">Tag the chest, safe or corpse behind a crevice, pick it in the list above, then:</div>
+  <div class="buttons"><button id="creviceToggle">Behind crevice ⇄</button></div>
+  <div id="creviceList" class="muted"></div>
+
   <div class="subhead">Before / after check</div>
   <div class="muted">Tag an object, set it as before; change its state, tag it again, set it as after.</div>
   <div class="buttons">
@@ -105,7 +140,7 @@
     <button id="watchHere">Watch my tile</button>
   </div>
   <div class="row">
-    <span>Area <button id="watchSmaller">−</button> <b id="watchRadius">1</b> <button id="watchBigger">+</button> tiles</span>
+    <span>Area <button id="watchSmaller">−</button> <b id="watchRadius">2</b> <button id="watchBigger">+</button> tiles</span>
   </div>
   <div class="buttons">
     <button id="watchArm" hidden>Open window</button>
@@ -140,7 +175,15 @@
   });
   byId("collapse").addEventListener("click", () => send("collapse"));
   byId("devToggle").addEventListener("click", () => send("dev"));
-  byId("anchorToggle").addEventListener("click", () => send("anchor"));
+  byId("settingsToggle").addEventListener("click", () => send("settings"));
+  byId("levelThieving").addEventListener("change", () => send("level:thieving"));
+  byId("levelAgility").addEventListener("change", () => send("level:agility"));
+  document.querySelectorAll("#checkpointButtons button").forEach((button) => {
+    button.addEventListener("click", () => send(`checkpoint:${button.dataset.checkpoint}`));
+  });
+  byId("batteryPick").addEventListener("click", () => send("battery"));
+  byId("lootBagPick").addEventListener("click", () => send("lootbag"));
+  byId("creviceToggle").addEventListener("click", () => send(`crevice:${selectedRank}`));
   byId("tag").addEventListener("click", () => send("tag"));
   byId("markTile").addEventListener("click", () => send("marktile"));
   byId("logTile").addEventListener("click", () => send("logtile"));
@@ -163,7 +206,7 @@
   const renderWatch = (watch, linkStep) => {
     const state = byId("watchState");
     const list = byId("watchItems");
-    byId("watchRadius").textContent = watch ? watch.radius : 1;
+    byId("watchRadius").textContent = watch ? watch.radius : 2;
     const learning = !!(watch && watch.active && watch.baseline);
     const open = !!(watch && watch.active && !watch.baseline && !watch.closed);
     byId("watchArm").hidden = !learning;
@@ -263,9 +306,6 @@
     }
   };
 
-  const pips = (done, total) =>
-    Array.from({ length: total }, (_, i) => `<span class="${i < done ? "done" : ""}"></span>`).join("");
-
   const renderCandidates = (tag) => {
     const list = byId("candidates");
     if (!tag) {
@@ -293,21 +333,54 @@
     byId("addButtons").hidden = false;
   };
 
+  const COUNTS = [["chest", "chest", "Chests"], ["safe", "safe", "Safes"], ["corpse", "corpse", "Corpses"], ["rareChest", "rare", "Rare"]];
+
+  const counts = (values) => COUNTS
+    .map(([kind, css, label]) => `<span class="${css}">${label} <b>${values ? values[kind] : "–"}</b></span>`)
+    .join("");
+
+  const renderMapping = (mapping) => {
+    byId("mapHeights").textContent = mapping ? `${mapping.withHeight}/${mapping.total}` : "–";
+    byId("mapSections").textContent = mapping ? `${mapping.withSection}/${mapping.loot}` : "–";
+    const marked = new Map((mapping && mapping.checkpoints || []).map((c) => [c.name, c]));
+    document.querySelectorAll("#checkpointButtons button").forEach((button) => {
+      const c = marked.get(button.dataset.checkpoint);
+      button.classList.toggle("on", !!(c && c.marked));
+      button.title = c && c.marked ? `Marked at ${c.dx},${c.dz}. Press again to move it here.` : "Not marked yet";
+    });
+    byId("mapBattery").textContent = mapping ? (mapping.battery ? "known" : "not picked yet") : "–";
+    byId("mapLootBag").textContent = mapping ? (mapping.lootBag ? "known" : "not picked yet") : "–";
+    byId("creviceList").innerHTML = mapping && mapping.crevices.length
+      ? mapping.crevices.map((c) => `${KIND_LABELS[c.kind] || c.kind} <code>${c.dx},${c.dz}</code>`).join("<br>")
+      : "No objects marked yet.";
+  };
+
   const render = (s) => {
-    byId("anchorState").textContent = s.anchored ? "In vault ✓" : "Waiting for vault…";
-    byId("anchorState").className = s.anchored ? "" : "muted";
-    byId("section").textContent = s.section ? `Section ${s.section}` : "";
-    for (const kind of ["chest", "safe", "corpse", "rareChest"]) {
-      byId(kind).textContent = s.anchored ? s.remaining[kind] : "–";
-    }
-    byId("corpseProgress").innerHTML = (s.corpses || [])
-      .map((c) => `<div class="row"><span class="corpse">Corpse in progress</span><span class="pips">${pips(c.done, c.total)}</span></div>`)
-      .join("");
-    byId("anchors").textContent = s.anchored ? `${s.anchors.powered}/${s.anchors.total}` : "–";
+    byId("sectionTitle").textContent = s.section ? `Section ${s.section}` : "Section –";
+    byId("currentCounts").innerHTML = counts(s.current);
+    byId("totalCounts").innerHTML = counts(s.anchored ? s.total : null);
+    byId("bagTotal").textContent = s.anchored ? `${s.loot || 0}/500` : "–";
+    const splits = s.splits || [];
+    const here = splits.find((x) => x.section === s.section);
+    byId("sectionLoot").textContent = here ? `${here.gained}/${here.potential}` : "–";
+    byId("splitRow").innerHTML = splits.length
+      ? splits.map((x) => `<span class="${x.section === s.section ? "here" : ""}">${x.section} <b>${x.gained}/${x.potential}</b></span>`).join("")
+      : [1, 2, 3, 4].map((n) => `<span>${n} <b>–</b></span>`).join("");
+    byId("settings").hidden = !s.settings;
+    byId("settingsToggle").classList.toggle("on", !!s.settings);
+    byId("levelThieving").checked = !!(s.levels && s.levels.thieving);
+    byId("levelAgility").checked = !!(s.levels && s.levels.agility);
+    renderMapping(s.mapping);
     byId("dev").hidden = !s.dev;
+    document.documentElement.style.overflowY = s.dev ? "auto" : "hidden";
     byId("devToggle").classList.toggle("on", !!s.dev);
     byId("tag").classList.toggle("on", !!s.tagArmed);
     byId("tagHint").hidden = !s.tagArmed;
+    byId("batteryPick").classList.toggle("on", s.pickTarget === "battery");
+    byId("lootBagPick").classList.toggle("on", s.pickTarget === "lootbag");
+    byId("pickHint").hidden = !s.pickTarget;
+    byId("pickHint").textContent = s.pickTarget === "lootbag"
+      ? "Middle-click the loot bag in your inventory…" : "Middle-click the batteries in your inventory…";
     renderCandidates(s.lastTag);
     renderLink(s.link, s.linkCount);
     renderCompare(s.compare);

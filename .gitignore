@@ -12,6 +12,13 @@
 /catalog.csv
 /links.csv
 /watch.log
+/loot.log
+/inventory.log
+/levels.csv
+/crevices.csv
+/checkpoints.csv
+/battery.csv
+/lootbag.csv
 
 # Anything credential-shaped
 creds

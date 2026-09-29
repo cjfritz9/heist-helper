@@ -11,10 +11,16 @@ local runstate = require("core.runstate")
 local objectmap = require("core.objectmap")
 local catalog = require("core.catalog")
 local status = require("core.status")
+local levels = require("core.levels")
+local checkpoints = require("core.checkpoints")
 local links = require("core.links")
 local linkwizard = require("core.linkwizard")
 local compare = require("core.compare")
 local nearby = require("core.nearby")
+local stacklabels = require("core.stacklabels")
+local rollinglog = require("core.rollinglog")
+local anchorclick = require("core.anchorclick")
+local defaultIcons = require("data.icons")
 local picker = require("gfx.picker")
 local markers = require("gfx.markers")
 local objectDraw = require("gfx.objects")
@@ -24,10 +30,13 @@ local chatlog = require("game.chatlog")
 local recorder = require("game.recorder")
 local panel = require("game.panel")
 local watch = require("game.watch")
+local inventory = require("game.inventory")
+local lootcounter = require("game.lootcounter")
 local chatModule = require("modules.chat.chat")
 local seedMarkers = require("data.markers")
 local seedObjects = require("data.objects")
 local seedLinks = require("data.links")
+local seedCheckpoints = require("data.checkpoints")
 
 local LOG_FILE = "positions.csv"
 local MARKERS_FILE = "markers.csv"
@@ -39,16 +48,23 @@ local RECORD_FILE = "record.log"
 local CATALOG_FILE = "catalog.csv"
 local LINKS_FILE = "links.csv"
 local WATCH_FILE = "watch.log"
-local ANCHOR_REACH_TILES = 3
+local LEVELS_FILE = "levels.csv"
+local CREVICES_FILE = "crevices.csv"
+local BATTERY_FILE = "battery.csv"
+local CHECKPOINTS_FILE = "checkpoints.csv"
+local LEARN_SECTION_TILES = 4
+local INVENTORY_FILE = "inventory.log"
+local LOG_LINES = 2000
 local TAG_CANDIDATES_SHOWN = 3
-local OUTLINE_UNLINKED_ANCHORS = false
 local SHOW_TILE_MARKERS = false
 local RECORD_UNLINKED_ANCHORS = false
 local DIAL_REACH_TILES = 3
 local LANDING_WINDOW_MICROSECONDS = 3 * 1000 * 1000
 local ERROR_FILE = "error.log"
 local TAG_ROWS_PER_CLICK = 8
+local LEFT_BUTTON = 1
 local MIDDLE_BUTTON = 3
+local BATTERY_VISIBLE_SECONDS = 2
 local FLASH_MICROSECONDS = 400 * 1000
 local FLASH_SIZE = 32
 local FLASH_MARGIN = 16
@@ -75,6 +91,14 @@ local player = nil
 local corpsesInView = {}
 local objectsInView = {}
 local tagArmed = false
+local pickTarget = nil
+local lastIcons = {}
+local mouse = nil
+local batteryWasPresent = false
+local batterySeenAt = -math.huge
+local pendingAnchors = {}
+local anchorClicks = anchorclick.new()
+local batteryHoverAt = -math.huge
 local lastTag = nil
 local lastTagCandidates = {}
 
@@ -118,7 +142,7 @@ local tagCount = picking.lastTag(tags)
 local savedMarkers = bolt.loadconfig(MARKERS_FILE)
 local markerData = (savedMarkers and markerstore.decode(savedMarkers)) or markerstore.copy(seedMarkers)
 
-local chatText = bolt.loadconfig(CHAT_FILE) or ""
+local chatLog = rollinglog.new(bolt.loadconfig(CHAT_FILE), LOG_LINES)
 local chatReader = chatlog.new(chatModule)
 
 local recordText = bolt.loadconfig(RECORD_FILE) or ""
@@ -138,6 +162,26 @@ local flushRecord = function(now)
   recordDirty = false
   nextRecordFlush = now + RECORD_FLUSH_MICROSECONDS
 end
+
+local inventoryLog = rollinglog.new(bolt.loadconfig(INVENTORY_FILE), LOG_LINES)
+local inventoryDirty = false
+local nextInventoryFlush = 0
+
+local appendInventory = function(line)
+  rollinglog.append(inventoryLog, string.format("[%9.3f] %s", bolt.time() / 1e6, line))
+  inventoryDirty = true
+end
+
+local flushInventory = function(now)
+  if not inventoryDirty or now < nextInventoryFlush then return end
+  bolt.saveconfig(INVENTORY_FILE, rollinglog.text(inventoryLog))
+  inventoryDirty = false
+  nextInventoryFlush = now + RECORD_FLUSH_MICROSECONDS
+end
+
+local batterySignature = (bolt.loadconfig(BATTERY_FILE) or ""):match("^%s*(%S+)") or defaultIcons.battery
+local knownLabels = {}
+local batteryLearner = stacklabels.newLearner()
 
 local watchHistory = bolt.loadconfig(WATCH_FILE) or ""
 local lastWatchReport = ""
@@ -180,10 +224,28 @@ objectScan.setWatched(links.watchedVertexCounts(linkSet))
 
 local run = runstate.decode(bolt.loadconfig(RUN_FILE))
 local objectMap = objectmap.merge(objectmap.new(seedObjects), bolt.loadconfig(OBJECTS_FILE))
+objectmap.loadCrevices(objectMap, bolt.loadconfig(CREVICES_FILE))
+local playerLevels = levels.decode(bolt.loadconfig(LEVELS_FILE))
+local checkpointSet = checkpoints.merge(checkpoints.new(seedCheckpoints), bolt.loadconfig(CHECKPOINTS_FILE))
+
+local learnSection = function(kind, dx, dz)
+  if checkpoints.complete(checkpointSet) and run.section
+    and objectmap.setSection(objectMap, kind, dx, dz, run.section) then
+    bolt.saveconfig(OBJECTS_FILE, objectmap.encode(objectMap))
+  end
+end
+
+local learnSectionFromKey = function(kind, k)
+  local dx, dz = (k or ""):match("^(%-?%d+),(%-?%d+)$")
+  if dx then
+    learnSection(kind, tonumber(dx), tonumber(dz))
+  end
+end
 
 local saveRun = function()
   bolt.saveconfig(RUN_FILE, runstate.encode(run))
 end
+lootcounter.init(bolt, run, saveRun)
 
 local syncMarkersToAnchor = function()
   if run.anchor then
@@ -208,20 +270,30 @@ local recordChat = function(message)
   recorder.note(bolt.time(), message, appendRecord)
   local event = runstate.chatEvent(text)
   if event == "loot" and player then
-    if runstate.recordLoot(run, objectsInView, player.tileX, player.tileZ) then
+    local k, count = runstate.recordLoot(run, objectsInView, player.tileX, player.tileZ)
+    if k then
+      local corpse = objectMap.index["corpse," .. k]
+      lootcounter.action(bolt.time(), "corpse", corpse and corpse.section)
+      lootcounter.append(string.format("detected rummage %d/%d on corpse %s", count, runstate.RUMMAGES_PER_CORPSE, k))
+      learnSectionFromKey("corpse", k)
       saveRun()
     end
   elseif event == "corpseLooted" and player then
-    if runstate.markNearestCorpse(run, corpsesInView, player.tileX, player.tileZ) then
+    local k = runstate.markNearestCorpse(run, corpsesInView, player.tileX, player.tileZ)
+    if k then
+      learnSectionFromKey("corpse", k)
       saveRun()
     end
+  elseif event == "caught" then
+    lootcounter.caught()
   elseif event == "runComplete" then
     runstate.resetRun(run)
     saveRun()
   end
   if inVault() then
-    chatText = chatText .. message .. "\n"
-    bolt.saveconfig(CHAT_FILE, chatText)
+    lootcounter.append("chat: " .. text)
+    rollinglog.append(chatLog, message)
+    bolt.saveconfig(CHAT_FILE, rollinglog.text(chatLog))
   end
 end
 
@@ -238,6 +310,9 @@ local noticeTeleport = function(fromX, fromZ, toX, toZ)
   end
   local used = nearby.nearest(objectsInView, "shadowDial", fromX, fromZ, DIAL_REACH_TILES)
   if used then
+    if runstate.setSection(run, checkpoints.afterDial(checkpointSet, used.tileX - run.anchor.x, used.tileZ - run.anchor.z)) then
+      saveRun()
+    end
     markDialUsed(used)
     landing = { tileX = toX, tileZ = toZ, untilTime = bolt.time() + LANDING_WINDOW_MICROSECONDS }
   end
@@ -265,20 +340,35 @@ local updatePlayer = function()
     noticeTeleport(player.tileX, player.tileZ, tile.tileX, tile.tileZ)
   end
   local arrival = anchor.fromArrival(player and player.tileX, player and player.tileZ, tile.tileX, tile.tileZ, y)
-  if arrival then
+  if arrival and anchor.sentBack(run.anchor, arrival, player and player.tileX, player and player.tileZ) then
+    runstate.setSection(run, 1)
+    saveRun()
+    lootcounter.append("sent back to the arrival tile (caught): run kept")
+  elseif arrival then
     runstate.resetRun(run)
     applyAnchor(arrival)
     saveRun()
   end
   player = { tileX = tile.tileX, tileZ = tile.tileZ, height = y }
+  if run.anchor and runstate.setSection(run,
+    checkpoints.at(checkpointSet, tile.tileX - run.anchor.x, tile.tileZ - run.anchor.z, y)) then
+    saveRun()
+  end
+end
+
+local isLootable = function(o)
+  local behind = run.anchor ~= nil
+    and objectmap.behindCrevice(objectMap, o.tileX - run.anchor.x, o.tileZ - run.anchor.z)
+  return levels.canLoot(playerLevels, o.kind, behind)
 end
 
 local isHighlighted = function(o)
+  if status.LOOT_KINDS[o.kind] and not isLootable(o) then
+    return false
+  end
   if o.kind == "shadowAnchor" then
     if not run.anchor then return false end
-    local dx, dz = o.tileX - run.anchor.x, o.tileZ - run.anchor.z
-    if not OUTLINE_UNLINKED_ANCHORS and not links.isLinked(linkSet, dx, dz) then return false end
-    return not runstate.isAnchorPowered(run, dx, dz)
+    return not runstate.isAnchorPowered(run, o.tileX - run.anchor.x, o.tileZ - run.anchor.z)
   end
   if o.kind == "shadowDial" then
     return run.anchor == nil
@@ -293,6 +383,20 @@ end
 local corpseProgress = function(o)
   local done = runstate.rummageCount(run, o.tileX - run.anchor.x, o.tileZ - run.anchor.z)
   return { done = done, total = runstate.RUMMAGES_PER_CORPSE }
+end
+
+local learnBattery = function(link)
+  if batterySignature then return end
+  local learned, candidates = stacklabels.learn(batteryLearner, bolt.time(),
+    run.anchor.x + link.anchorDx, run.anchor.z + link.anchorDz)
+  if learned then
+    batterySignature = learned
+    bolt.saveconfig(BATTERY_FILE, learned .. "\n")
+    appendInventory(string.format("learned battery %s from anchor %d,%d", learned, link.anchorDx, link.anchorDz))
+  else
+    appendInventory(string.format("anchor %d,%d powered by its link; %d stacks changed next to it, battery not learned",
+      link.anchorDx, link.anchorDz, candidates))
+  end
 end
 
 local checkLinks = function(watchedModels)
@@ -311,6 +415,7 @@ local checkLinks = function(watchedModels)
       if links.poweredNow(link, seen, near, linkTracker)
         and runstate.setAnchorPowered(run, link.anchorDx, link.anchorDz) then
         changed = true
+        learnBattery(link)
       end
     end
   end
@@ -320,7 +425,7 @@ end
 local processObjects = function(objects, watchedModels, selectedPoints)
   if not inVault() then
     for _, o in ipairs(objects) do
-      local a = anchor.fromObject(o.kind, o.tileX, o.tileZ, objectMap.list)
+      local a = o.y and anchor.fromObject(o.kind, o.tileX, o.tileZ, o.y, objectMap.list)
       if a then
         applyAnchor(a)
         break
@@ -338,11 +443,17 @@ local processObjects = function(objects, watchedModels, selectedPoints)
     end
     if recording then
       local dx, dz = o.tileX - run.anchor.x, o.tileZ - run.anchor.z
-      if objectmap.add(objectMap, o.kind, dx, dz) then
+      if objectmap.add(objectMap, o.kind, dx, dz, o.y) then
         mapChanged = true
       end
       if o.looted == true and runstate.markObjectLooted(run, o.kind, dx, dz) then
         runChanged = true
+        lootcounter.append(string.format("detected %s %d,%d opened", o.kind, dx, dz))
+        local mapped = objectMap.index[o.kind .. "," .. dx .. "," .. dz]
+        lootcounter.action(bolt.time(), o.kind, mapped and mapped.section)
+        if player and math.max(math.abs(o.tileX - player.tileX), math.abs(o.tileZ - player.tileZ)) <= LEARN_SECTION_TILES then
+          learnSection(o.kind, dx, dz)
+        end
       end
     end
     if isHighlighted(o) then
@@ -368,6 +479,157 @@ local processObjects = function(objects, watchedModels, selectedPoints)
     highlighted[#highlighted + 1] = { kind = "selected", points = selectedPoints }
   end
   objectDraw.draw(bolt, highlighted)
+end
+
+local pickIcon = function(target, x, y)
+  for _, icon in ipairs(lastIcons) do
+    if x >= icon.x and x <= icon.x + icon.w and y >= icon.y and y <= icon.y + icon.h then
+      if target == "battery" then
+        batterySignature = icon.signature
+        bolt.saveconfig(BATTERY_FILE, batterySignature .. "\n")
+      else
+        lootcounter.setBag(icon.signature)
+      end
+      appendInventory(target .. " picked: " .. icon.signature)
+      showFlash("added")
+      return
+    end
+  end
+  showFlash("unknown")
+end
+
+local markPowered = function(dx, dz, reason)
+  if runstate.setAnchorPowered(run, dx, dz) then
+    saveRun()
+    appendInventory(string.format("%s at anchor %d,%d: marked powered", reason, dx, dz))
+  end
+end
+
+local notePendingAnchors = function()
+  for _, o in ipairs(objectsInView) do
+    if o.kind == "shadowAnchor"
+      and math.max(math.abs(o.tileX - player.tileX), math.abs(o.tileZ - player.tileZ)) <= stacklabels.REACH_TILES then
+      local dx, dz = o.tileX - run.anchor.x, o.tileZ - run.anchor.z
+      if not runstate.isAnchorPowered(run, dx, dz) then
+        pendingAnchors[dx .. "," .. dz] = { dx = dx, dz = dz }
+      end
+    end
+  end
+end
+
+local pendingBattery = nil
+
+local powerAnchorByBattery = function(now)
+  local targets = {}
+  local best = nearby.nearest(objectsInView, "shadowAnchor", player.tileX, player.tileZ, stacklabels.REACH_TILES)
+  if best then
+    targets[1] = { dx = best.tileX - run.anchor.x, dz = best.tileZ - run.anchor.z, reason = "battery used" }
+  else
+    for _, a in pairs(pendingAnchors) do
+      targets[#targets + 1] = { dx = a.dx, dz = a.dz, reason = "battery went down while the inventory was hidden" }
+    end
+  end
+  if #targets == 0 then
+    appendInventory("battery changed, but no shadow anchor within reach")
+    return
+  end
+  pendingBattery = { at = now, targets = targets }
+end
+
+local settleBattery = function(now)
+  if not pendingBattery then return end
+  if stacklabels.aroundLoot(pendingBattery.at, lootcounter.lastActionAt()) then
+    appendInventory("battery change came with loot: no anchor marked")
+    pendingBattery = nil
+  elseif stacklabels.decided(now, pendingBattery.at) then
+    for _, t in ipairs(pendingBattery.targets) do
+      markPowered(t.dx, t.dz, t.reason)
+    end
+    pendingBattery = nil
+  end
+end
+
+local checkAnchorClick = function()
+  if not player or not run.anchor then return end
+  local now = bolt.time()
+  local batteryVisible = now - batterySeenAt <= BATTERY_VISIBLE_SECONDS * 1e6
+  local dx, dz = anchorclick.ready(anchorClicks, now, player.tileX - run.anchor.x, player.tileZ - run.anchor.z,
+    batteryVisible)
+  if dx then
+    markPowered(dx, dz, "clicked with no batteries in view")
+  end
+end
+
+local noticeAnchorClick = function(x, y)
+  if not run.anchor then return end
+  local vx, vy = bolt.gameviewxywh()
+  for _, o in ipairs(objectsInView) do
+    if o.kind == "shadowAnchor" and anchorclick.contains(o.points, x - vx, y - vy) then
+      local dx, dz = o.tileX - run.anchor.x, o.tileZ - run.anchor.z
+      if not runstate.isAnchorPowered(run, dx, dz) then
+        anchorclick.clicked(anchorClicks, dx, dz, bolt.time())
+        appendInventory(string.format("clicked anchor %d,%d", dx, dz))
+      end
+      return
+    end
+  end
+end
+
+local processInventory = function()
+  local icons, glyphs, images = inventory.takeFrame()
+  if #icons > 0 then
+    lastIcons = icons
+  end
+  lootcounter.frame(icons, glyphs, images, lastIcons, player ~= nil and run.anchor ~= nil)
+  if not player or not run.anchor then return end
+  local now = bolt.time()
+  settleBattery(now)
+  if #icons == 0 then
+    notePendingAnchors()
+  end
+  if batterySignature and stacklabels.present(icons, batterySignature) then
+    batterySeenAt = now
+  end
+  for _, icon in ipairs(icons) do
+    if icon.signature == batterySignature and mouse and stacklabels.near(icon, mouse.x, mouse.y) then
+      batteryHoverAt = now
+    end
+  end
+  local hovering = now - batteryHoverAt <= stacklabels.HOVER_SECONDS * 1e6
+  local usedUp = batterySignature ~= nil and stacklabels.usedUp(batteryWasPresent, icons, batterySignature)
+  if #icons > 0 then
+    batteryWasPresent = batterySignature ~= nil and stacklabels.present(icons, batterySignature)
+  end
+  if usedUp then
+    appendInventory(string.format("battery stack gone at %d,%d%s", player.tileX - run.anchor.x,
+      player.tileZ - run.anchor.z, hovering and " (ignored: mouse over it)" or ""))
+    if not hovering then
+      powerAnchorByBattery(now)
+    end
+  end
+  local changes = stacklabels.update(knownLabels, stacklabels.frame(icons, glyphs))
+  if #changes == 0 then
+    if #icons > 0 then pendingAnchors = {} end
+    return
+  end
+  if not hovering then
+    stacklabels.note(batteryLearner, now, changes, player.tileX, player.tileZ)
+  end
+  local batteryChanged = false
+  for _, c in ipairs(changes) do
+    local isBattery = c.signature == batterySignature
+    local ignored = hovering and "mouse over it" or nil
+    appendInventory(string.format("stack %s: '%s' -> '%s' at %d,%d%s", c.key, c.before, c.after,
+      player.tileX - run.anchor.x, player.tileZ - run.anchor.z,
+      isBattery and (ignored and (" (battery, ignored: " .. ignored .. ")") or " (battery)") or ""))
+    batteryChanged = batteryChanged or (isBattery and not ignored)
+  end
+  if batteryChanged then
+    powerAnchorByBattery(now)
+  end
+  if #icons > 0 then
+    pendingAnchors = {}
+  end
 end
 
 local logPosition = function(x, y, z)
@@ -554,23 +816,55 @@ local comparisonStatus = function()
   return { rows = rows, verdict = compare.verdict(comparison.before, comparison.after) }
 end
 
-local toggleNearestAnchor = function()
-  if not player or not run.anchor then
+local toggleCrevice = function(rank)
+  local candidate = lastTagCandidates[tonumber(rank) or 0]
+  local kind = candidate and catalog.classify(candidate.vertices, candidate.fingerprint, candidate.animated)
+  if not run.anchor or not status.LOOT_KINDS[kind] then
     showFlash("unknown")
     return
   end
-  local best = nearby.nearest(objectsInView, "shadowAnchor", player.tileX, player.tileZ, ANCHOR_REACH_TILES)
-  if not best then
-    showFlash("unknown")
-    return
-  end
-  local powered = runstate.toggleAnchor(run, best.tileX - run.anchor.x, best.tileZ - run.anchor.z)
-  saveRun()
-  showFlash(powered and "added" or "removed")
+  local behind = objectmap.toggleCrevice(objectMap, candidate.tileX - run.anchor.x, candidate.tileZ - run.anchor.z)
+  bolt.saveconfig(CREVICES_FILE, objectmap.encodeCrevices(objectMap))
+  showFlash(behind and "added" or "removed")
 end
 
+local markCheckpoint = function(name)
+  if not player or not run.anchor
+    or not checkpoints.put(checkpointSet, name, player.tileX - run.anchor.x, player.tileZ - run.anchor.z, player.height) then
+    showFlash("unknown")
+    return
+  end
+  bolt.saveconfig(CHECKPOINTS_FILE, checkpoints.encode(checkpointSet))
+  runstate.setSection(run, checkpointSet.markers[name].section)
+  saveRun()
+  showFlash("added")
+end
+
+local toggleLevel = function(name)
+  if levels.toggle(playerLevels, name) then
+    bolt.saveconfig(LEVELS_FILE, levels.encode(playerLevels))
+  end
+end
+
+bolt.onmousemotion(function(event)
+  if not active then return end
+  local x, y = event:xy()
+  mouse = { x = x, y = y }
+  lootcounter.setMouse(x, y)
+end)
+
 bolt.onmousebutton(function(event)
+  if active and event:button() == LEFT_BUTTON then
+    guarded("inventory", noticeAnchorClick, event:xy())
+    return
+  end
   if not active or event:button() ~= MIDDLE_BUTTON then
+    return
+  end
+  if pickTarget and not event:ctrl() and not event:shift() and not event:alt() then
+    local target = pickTarget
+    pickTarget = nil
+    pickIcon(target, event:xy())
     return
   end
   if event:ctrl() or (tagArmed and not event:shift() and not event:alt()) then
@@ -592,12 +886,16 @@ end)
 
 panel.init(bolt, {
   tag = function() tagArmed = not tagArmed end,
+  battery = function() pickTarget = pickTarget ~= "battery" and "battery" or nil end,
+  lootbag = function() pickTarget = pickTarget ~= "lootbag" and "lootbag" or nil end,
   marktile = function()
     if SHOW_TILE_MARKERS then atPlayer(toggleMarker) end
   end,
   logtile = function() atPlayer(logPosition) end,
   add = addTaggedModel,
-  anchor = toggleNearestAnchor,
+  crevice = toggleCrevice,
+  checkpoint = markCheckpoint,
+  level = toggleLevel,
   link = linkCommand,
   compare = compareCommand,
   select = selectCandidate,
@@ -642,10 +940,17 @@ end)
 bolt.onrender2d(function(event)
   if not active then return end
   guarded("chat", chatlog.read, chatReader, bolt.time(), event, recordChat)
+  guarded("inventory", inventory.inspect2d, event, lootcounter.want)
+end)
+
+bolt.onrendericon(function(event)
+  if not active then return end
+  guarded("inventory", inventory.inspectIcon, event)
 end)
 
 bolt.onswapbuffers(function()
   guarded("player", updatePlayer)
+  guarded("loot", lootcounter.updatePlayerScreen, viewProj)
   active = inVault()
   guarded("panel", panel.setVisible, active)
   local finished = picker.advance()
@@ -656,6 +961,12 @@ bolt.onswapbuffers(function()
     guarded("draw", markers.draw, bolt, markerData, viewProj)
   end
   guarded("watch", watch.endFrame, bolt.time())
+  if active then
+    guarded("inventory", processInventory)
+    guarded("inventory", checkAnchorClick)
+  end
+  guarded("inventory", flushInventory, bolt.time())
+  guarded("loot", lootcounter.flush, bolt.time())
   local seenObjects, watchedModels, selectedPoints = objectScan.takeFrame()
   guarded("highlight", processObjects, seenObjects, watchedModels, selectedPoints)
   if active and player and RECORD_UNLINKED_ANCHORS then
@@ -667,14 +978,23 @@ bolt.onswapbuffers(function()
   end
   guarded("record", flushRecord, bolt.time())
   if not active then return end
-  local panelStatus = status.build(run, objectMap.list, player and player.height)
+  local panelStatus = status.build(run, objectMap, run.anchor and run.section, playerLevels)
+  if panel.devEnabled() then
+    panelStatus.mapping = status.mapping(objectMap)
+    panelStatus.mapping.battery = batterySignature ~= nil
+    panelStatus.mapping.lootBag = lootcounter.bagKnown()
+    panelStatus.mapping.checkpoints = checkpoints.list(checkpointSet)
+  end
   panelStatus.tagArmed = tagArmed
+  panelStatus.pickTarget = pickTarget
+  panelStatus.loot = run.loot
   panelStatus.lastTag = lastTag
   panelStatus.link = linkwizard.status(wizard)
   panelStatus.linkCount = #linkSet.list
   panelStatus.compare = comparisonStatus()
   panelStatus.watch = watch.status()
   guarded("panel", panel.update, bolt.time(), panelStatus)
+  guarded("loot", lootcounter.draw)
   if flash and bolt.time() < flashUntil then
     flash:drawtoscreen(0, 0, 1, 1, FLASH_MARGIN, FLASH_MARGIN, FLASH_SIZE, FLASH_SIZE)
   end

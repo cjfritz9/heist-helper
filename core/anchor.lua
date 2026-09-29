@@ -6,6 +6,7 @@ M.ARRIVAL_HEIGHT = 4933
 
 local REGION_TILES = 64
 local HEIGHT_TOLERANCE = 100
+local OBJECT_HEIGHT_TOLERANCE = 32
 local TELEPORT_TILES = 20
 local BOUNDS = { minDx = -45, maxDx = 32, minDz = -115, maxDz = 16 }
 
@@ -23,10 +24,16 @@ function M.fromArrival(prevX, prevZ, x, z, height)
   return { x = x, z = z }
 end
 
-function M.fromObject(kind, x, z, objects)
+function M.sentBack(current, arrival, prevX, prevZ)
+  return current ~= nil and prevX ~= nil
+    and current.x == arrival.x and current.z == arrival.z
+    and M.inVault(current, prevX, prevZ)
+end
+
+function M.fromObject(kind, x, z, y, objects)
   local found = nil
   for _, o in ipairs(objects) do
-    if o.kind == kind then
+    if o.kind == kind and o.y and math.abs(o.y - y) <= OBJECT_HEIGHT_TOLERANCE then
       local ax, az = x - o.dx, z - o.dz
       if onGrid(ax, az) then
         if found and (found.x ~= ax or found.z ~= az) then

@@ -20,31 +20,40 @@ function T.walking_back_over_arrival_tile_is_ignored()
   assert.eq(anchor.fromArrival(11300, 3243, 11299, 3243, 4933), nil, "walked")
 end
 
+function T.caught_and_sent_back_is_not_a_new_run()
+  local current = { x = 11875, z = 4203 }
+  assert.eq(anchor.sentBack(current, { x = 11875, z = 4203 }, 11880, 4185), true, "from inside the same vault")
+  assert.eq(anchor.sentBack(current, { x = 11875, z = 4203 }, 3297, 3184), false, "from outside: a new entry")
+  assert.eq(anchor.sentBack(current, { x = 6499, z = 4395 }, 11880, 4185), false, "another instance")
+  assert.eq(anchor.sentBack(nil, { x = 11875, z = 4203 }, 11880, 4185), false, "no run yet")
+  assert.eq(anchor.sentBack(current, { x = 11875, z = 4203 }, nil, nil), false, "first frame")
+end
+
 function T.arrival_needs_grid_and_height()
   assert.eq(anchor.fromArrival(nil, nil, 11300, 3243, 4933), nil, "off grid")
   assert.eq(anchor.fromArrival(nil, nil, 11299, 3243, 2181), nil, "wrong height")
 end
 
 function T.corpse_in_second_instance_finds_its_anchor()
-  local a = anchor.fromObject("corpse", 11883, 4207, OBJECTS)
+  local a = anchor.fromObject("corpse", 11883, 4207, 4933, OBJECTS)
   assert.eq(a.x, 11875, "x")
   assert.eq(a.z, 4203, "z")
 end
 
 function T.corpse_in_third_instance_finds_its_anchor()
-  local a = anchor.fromObject("corpse", 6507, 4399, OBJECTS)
+  local a = anchor.fromObject("corpse", 6507, 4399, 4933, OBJECTS)
   assert.eq(a.x, 6499, "x")
   assert.eq(a.z, 4395, "z")
 end
 
 function T.each_mapped_chest_resolves_to_one_anchor()
-  local a = anchor.fromObject("chest", 11299 + 15 + 640, 3243 - 73 - 64, OBJECTS)
+  local a = anchor.fromObject("chest", 11299 + 15 + 640, 3243 - 73 - 64, 2176, OBJECTS)
   assert.eq(a.x, 11299 + 640, "x")
   assert.eq(a.z, 3243 - 64, "z")
 end
 
 function T.shadow_anchor_finds_its_anchor()
-  local a = anchor.fromObject("shadowAnchor", 6491, 4332, OBJECTS)
+  local a = anchor.fromObject("shadowAnchor", 6491, 4332, 2176, OBJECTS)
   assert.eq(a.x, 6499, "x")
   assert.eq(a.z, 4395, "z")
 end
@@ -63,14 +72,19 @@ end
 
 function T.every_mapped_object_resolves_to_a_unique_anchor()
   for _, o in ipairs(OBJECTS) do
-    local a = anchor.fromObject(o.kind, 6499 + o.dx, 4395 + o.dz, OBJECTS)
+    local a = anchor.fromObject(o.kind, 6499 + o.dx, 4395 + o.dz, o.y, OBJECTS)
     assert.eq(a and a.x, 6499, o.kind .. " " .. o.dx .. "," .. o.dz)
   end
 end
 
 function T.unmapped_object_gives_no_anchor()
-  assert.eq(anchor.fromObject("chest", 11300, 3200, OBJECTS), nil, "unmapped")
-  assert.eq(anchor.fromObject("corpse", 11300, 3200, {}), nil, "empty map")
+  assert.eq(anchor.fromObject("chest", 11300, 3200, 2176, OBJECTS), nil, "unmapped")
+  assert.eq(anchor.fromObject("corpse", 11300, 3200, 4933, {}), nil, "empty map")
+end
+
+function T.lookalike_at_another_height_gives_no_anchor()
+  assert.eq(anchor.fromObject("corpse", 6507, 4399, 2005, OBJECTS), nil, "entrance height")
+  assert.eq(anchor.fromObject("chest", 11299 + 15 + 640, 3243 - 73 - 64, 256, OBJECTS), nil, "other floor")
 end
 
 function T.in_vault_uses_bounds_around_anchor()

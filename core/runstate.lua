@@ -4,6 +4,8 @@ M.CORPSE_DONE = "You'vetakeneverythingyoucanfromthattarget."
 M.RUN_COMPLETE_PREFIX = "CompletionTime:"
 M.LOOT_PREFIX = "Youloot"
 M.RUMMAGES_PER_CORPSE = 5
+M.CAUGHT = "Youhavebeencaught...Youlosesomeloot."
+M.CATCH_LOSS = 20
 
 local CORPSE_REACH_TILES = 3
 
@@ -16,7 +18,8 @@ local objectKey = function(kind, dx, dz)
 end
 
 function M.new()
-  return { anchor = nil, lootedCorpses = {}, rummages = {}, lootedObjects = {}, poweredAnchors = {} }
+  return { anchor = nil, section = nil, loot = 0, sectionLoot = {}, lootedCorpses = {}, rummages = {},
+    lootedObjects = {}, poweredAnchors = {} }
 end
 
 function M.setAnchor(state, anchor)
@@ -29,10 +32,34 @@ function M.setAnchor(state, anchor)
 end
 
 function M.resetRun(state)
+  state.section = 1
+  state.loot = 0
+  state.sectionLoot = {}
   state.lootedCorpses = {}
   state.rummages = {}
   state.lootedObjects = {}
   state.poweredAnchors = {}
+end
+
+function M.addLoot(state, amount, section)
+  local before = state.loot or 0
+  state.loot = math.max(0, before + amount)
+  if section then
+    state.sectionLoot[section] = (state.sectionLoot[section] or 0) + (state.loot - before)
+  end
+  return state.loot
+end
+
+function M.setLoot(state, total, section)
+  return M.addLoot(state, total - (state.loot or 0), section)
+end
+
+function M.setSection(state, section)
+  if not section or state.section == section then
+    return false
+  end
+  state.section = section
+  return true
 end
 
 function M.markObjectLooted(state, kind, dx, dz)
@@ -46,12 +73,6 @@ end
 
 function M.isObjectLooted(state, kind, dx, dz)
   return state.lootedObjects[objectKey(kind, dx, dz)] == true
-end
-
-function M.toggleAnchor(state, dx, dz)
-  local k = key(dx, dz)
-  state.poweredAnchors[k] = not state.poweredAnchors[k] or nil
-  return state.poweredAnchors[k] == true
 end
 
 function M.setAnchorPowered(state, dx, dz)
@@ -128,6 +149,9 @@ function M.chatEvent(text)
   if text == M.CORPSE_DONE then
     return "corpseLooted"
   end
+  if text == M.CAUGHT then
+    return "caught"
+  end
   if text:sub(1, #M.LOOT_PREFIX) == M.LOOT_PREFIX then
     return "loot"
   end
@@ -141,6 +165,15 @@ function M.encode(state)
   local out = {}
   if state.anchor then
     out[#out + 1] = string.format("anchor,%d,%d", state.anchor.x, state.anchor.z)
+  end
+  if state.section then
+    out[#out + 1] = "section," .. state.section
+  end
+  if state.loot and state.loot > 0 then
+    out[#out + 1] = "loot," .. state.loot
+  end
+  for section, amount in pairs(state.sectionLoot) do
+    out[#out + 1] = string.format("sectionloot,%d,%d", section, amount)
   end
   for k in pairs(state.lootedCorpses) do
     out[#out + 1] = "corpse," .. k
@@ -170,6 +203,18 @@ function M.decode(text)
       state.rummages[key(tonumber(a), tonumber(b))] = tonumber(c)
     elseif kind == "powered" then
       state.poweredAnchors[key(tonumber(a), tonumber(b))] = true
+    end
+    local loot = line:match("^loot,(%d+)$")
+    if loot then
+      state.loot = tonumber(loot)
+    end
+    local lootSection, lootAmount = line:match("^sectionloot,(%d+),(%-?%d+)$")
+    if lootSection then
+      state.sectionLoot[tonumber(lootSection)] = tonumber(lootAmount)
+    end
+    local section = line:match("^section,(%d+)$")
+    if section then
+      state.section = tonumber(section)
     end
     local lootedKind, lx, lz = line:match("^looted,(%a+),(%-?%d+),(%-?%d+)$")
     if lootedKind then
