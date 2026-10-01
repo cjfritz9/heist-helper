@@ -94,4 +94,17 @@ function T.potential_and_gained_per_section()
   assert.eq(status.build(run, objectmap.new(objects), 2, low).splits[2].potential, 25, "no safe, no crevice")
 end
 
+function T.remaining_lists_what_is_left_to_loot()
+  local map = objectmap.new()
+  objectmap.add(map, "chest", 1, 1, 256)
+  objectmap.add(map, "safe", 2, 2, 256)
+  objectmap.add(map, "shadowAnchor", 3, 3, 256)
+  local run = runstate.new()
+  run.anchor = { x = 100, z = 100 }
+  runstate.markObjectLooted(run, "chest", 1, 1)
+  local left = status.remaining(run, map, levels.new())
+  assert.eq(#left, 1, "only the safe")
+  assert.eq(left[1].kind, "safe", "the safe")
+end
+
 return T

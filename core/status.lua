@@ -40,6 +40,18 @@ local isLeft = function(run, o)
   return not runstate.isObjectLooted(run, o.kind, o.dx, o.dz)
 end
 
+function M.remaining(run, map, playerLevels)
+  local out = {}
+  if not run.anchor then return out end
+  for _, o in ipairs(map.list) do
+    if M.LOOT_KINDS[o.kind] and isLeft(run, o)
+      and levels.canLoot(playerLevels, o.kind, objectmap.behindCrevice(map, o.dx, o.dz)) then
+      out[#out + 1] = o
+    end
+  end
+  return out
+end
+
 function M.build(run, map, section, playerLevels)
   local total = emptyCounts()
   local current = section and emptyCounts() or nil

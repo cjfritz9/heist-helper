@@ -42,7 +42,10 @@
   .candidate input { margin: 0; }
   code { font: 11px/1 Consolas, monospace; color: var(--gold); }
   #dev[hidden] { display: none; }
-  .subhead { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); color: var(--gold); }
+  details.group { border-top: 1px dashed var(--line); padding: 4px 0; }
+  details.group:first-child { border-top: 0; }
+  details.group > summary { cursor: pointer; color: var(--gold); padding: 2px 0; }
+  details.group[open] > summary { margin-bottom: 4px; }
   .warn { color: #ff9b6b; }
   table.compare { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 11px; }
   table.compare td { padding: 1px 3px; border-bottom: 1px solid #2f271d; }
@@ -64,19 +67,21 @@
 <header id="drag">
   <h1>Heist Helper</h1>
   <button id="settingsToggle" title="Your levels">⚙</button>
-  <button id="devToggle" title="Show developer tools">dev</button>
+  <button id="devToggle" title="Show developer tools" hidden>dev</button>
   <button id="collapse" title="Collapse to a small tab">▾</button>
 </header>
 
 <section class="block">
   <div class="title"><span id="sectionTitle">Section –</span><span id="sectionLoot" class="loot">–</span></div>
   <div class="counts" id="currentCounts"></div>
+  <div id="chatWarn" class="warn" hidden></div>
 </section>
 
 <section class="block">
   <div class="title muted"><span>Vault</span><span>Loot <b id="bagTotal">–</b></span></div>
   <div class="counts" id="totalCounts"></div>
   <div class="counts split" id="splitRow"></div>
+  <div class="counts split" id="runsRow"></div>
 </section>
 
 <section class="block" id="settings" hidden>
@@ -84,95 +89,121 @@
   <label class="toggle"><input type="checkbox" id="levelThieving"> Thieving 102+ <span class="muted">(safes)</span></label>
   <label class="toggle"><input type="checkbox" id="levelAgility"> Agility 72+ <span class="muted">(crevices)</span></label>
   <label class="toggle"><input type="checkbox" id="mazeToggle"> Maze route <span class="muted">(reads the screen)</span></label>
+  <label class="toggle"><input type="checkbox" id="ghostsToggle"> Ghost vision tiles</label>
+  <label class="toggle"><input type="checkbox" id="ghostsUnseenToggle"> Keep patrols drawn out of view <span class="muted">(off for submission)</span></label>
+  <label class="toggle"><input type="checkbox" id="devToolsToggle"> Developer tools</label>
 </section>
 
 <section id="dev" hidden>
-  <div class="buttons">
-    <button id="tag" title="Then middle-click an object to tag it">Tag object</button>
-    <button id="markTile" title="Add or remove a tile marker where you stand" hidden>Mark tile</button>
-    <button id="logTile" title="Log the tile you're standing on">Log tile</button>
-  </div>
-  <div id="tagHint" class="muted" hidden>Middle-click an object…</div>
-  <div id="lastTag" class="muted">No tag yet.</div>
-  <div id="candidates"></div>
-  <div class="buttons" id="addButtons" hidden>
-    <button data-kind="corpse" class="corpse">+ corpse</button>
-    <button data-kind="chestClosed" class="chest">+ chest</button>
-    <button data-kind="chestOpen" class="chest">+ chest (open)</button>
-    <button data-kind="safe" class="safe">+ safe</button>
-    <button data-kind="dial">+ dial</button>
-    <button data-kind="anchor" class="anchor">+ anchor</button>
-  </div>
-
-  <div class="subhead">Section checkpoints</div>
-  <div class="muted">Stand 1–2 tiles from the barrier on that side, then press its button. Near a marker, your section becomes the marker's section; the shadow dial works by itself.</div>
-  <div class="buttons" id="checkpointButtons">
-    <button data-checkpoint="legionary1">Legionary · section 1 side</button>
-    <button data-checkpoint="legionary2">Legionary · section 2 side</button>
-    <button data-checkpoint="praetorian3">Praetorian · section 3 side</button>
-    <button data-checkpoint="praetorian4">Praetorian · section 4 side</button>
-  </div>
-  <div class="row"><span>Loot with a section</span><b id="mapSections">–</b></div>
-
-  <div class="subhead">Maze</div>
-  <div class="muted">Mark each barrier's row: stand on the tile at one end of the 5 tiles flush against it and press, then the other end.</div>
-  <div class="buttons" id="mazeRowButtons">
-    <button data-row="west">West</button>
-    <button data-row="north">North</button>
-    <button data-row="east">East</button>
-    <button data-row="south">South</button>
-  </div>
-  <div class="row"><span>Path</span><b id="mazeState">–</b></div>
-
-  <div class="subhead">Map objects</div>
-  <div class="row"><span>Heights recorded</span><b id="mapHeights">–</b></div>
-  <div class="row"><span>Battery stack</span><b id="mapBattery">–</b></div>
-  <div class="row"><span>Loot bag</span><b id="mapLootBag">–</b></div>
-  <div class="buttons">
-    <button id="batteryPick" title="Then middle-click the batteries in your inventory">Pick battery</button>
-    <button id="lootBagPick" title="Then middle-click the loot bag in your inventory">Pick loot bag</button>
-  </div>
-  <div id="pickHint" class="muted" hidden></div>
-  <div class="muted">Tag the chest, safe or corpse behind a crevice, pick it in the list above, then:</div>
-  <div class="buttons"><button id="creviceToggle">Behind crevice ⇄</button></div>
-  <div id="creviceList" class="muted"></div>
-
-  <div class="subhead">Before / after check</div>
-  <div class="muted">Tag an object, set it as before; change its state, tag it again, set it as after.</div>
-  <div class="buttons">
-    <button id="compareBefore">Set as before</button>
-    <button id="compareAfter">Set as after</button>
-    <button id="compareClear">Clear</button>
-  </div>
-  <table class="compare" id="compareTable" hidden></table>
-  <div id="compareVerdict"></div>
-
-  <div class="subhead">Watch object</div>
-  <div class="muted">Pick a centre, size the area (green square in game), let it learn the background, open the window, trigger the change, close the window.</div>
-  <div class="buttons">
-    <button id="watchStart">Watch selected</button>
-    <button id="watchHere">Watch my tile</button>
-    <button id="watchMaze" title="Watch the whole section 4 centre room (radius 16)">Watch maze</button>
-    <button id="captureScreen" title="Save the next screen image to the plugin's config folder">Capture screen</button>
-  </div>
-  <div class="row">
-    <span>Area <button id="watchSmaller">−</button> <b id="watchRadius">2</b> <button id="watchBigger">+</button> tiles</span>
-  </div>
-  <div class="buttons">
-    <button id="watchArm" hidden>Open window</button>
-    <button id="watchClose" hidden>Close window</button>
-    <button id="watchClear">Clear</button>
-  </div>
-  <div id="watchState" class="muted"></div>
-  <div id="watchItems"></div>
-
-  <div class="subhead">Anchor links <span id="linkCount" class="muted"></span></div>
-  <div id="linkIdle" class="buttons"><button id="linkStart" class="anchor">Link an anchor</button></div>
-  <div id="linkSteps" hidden>
-    <div id="linkInstruction"></div>
-    <div id="linkMessage" class="warn"></div>
-    <div class="buttons" id="linkButtons"></div>
-  </div>
+  <details class="group" data-group="tag">
+    <summary>Tag object</summary>
+    <div class="buttons">
+      <button id="tag" title="Then middle-click an object to tag it">Tag object</button>
+      <button id="markTile" title="Add or remove a tile marker where you stand" hidden>Mark tile</button>
+      <button id="logTile" title="Log the tile you're standing on">Log tile</button>
+    </div>
+    <div id="tagHint" class="muted" hidden>Middle-click an object…</div>
+    <div id="lastTag" class="muted">No tag yet.</div>
+    <div id="candidates"></div>
+    <div class="buttons" id="addButtons" hidden>
+      <button data-kind="corpse" class="corpse">+ corpse</button>
+      <button data-kind="chestClosed" class="chest">+ chest</button>
+      <button data-kind="chestOpen" class="chest">+ chest (open)</button>
+      <button data-kind="safe" class="safe">+ safe</button>
+      <button data-kind="dial">+ dial</button>
+      <button data-kind="anchor" class="anchor">+ anchor</button>
+    </div>
+  </details>
+  <details class="group" data-group="checkpoints">
+    <summary>Section checkpoints</summary>
+    <div class="muted">Stand 1–2 tiles from the barrier on that side, then press its button. Near a marker, your section becomes the marker's section; the shadow dial works by itself.</div>
+    <div class="buttons" id="checkpointButtons">
+      <button data-checkpoint="legionary1">Legionary · section 1 side</button>
+      <button data-checkpoint="legionary2">Legionary · section 2 side</button>
+      <button data-checkpoint="praetorian3">Praetorian · section 3 side</button>
+      <button data-checkpoint="praetorian4">Praetorian · section 4 side</button>
+    </div>
+    <div class="row"><span>Loot with a section</span><b id="mapSections">–</b></div>
+  </details>
+  <details class="group" data-group="maze">
+    <summary>Maze</summary>
+    <div class="muted">Mark each barrier's row: stand on the tile at one end of the 5 tiles flush against it and press, then the other end.</div>
+    <div class="buttons" id="mazeRowButtons">
+      <button data-row="west">West</button>
+      <button data-row="north">North</button>
+      <button data-row="east">East</button>
+      <button data-row="south">South</button>
+    </div>
+    <div class="row"><span>Path</span><b id="mazeState">–</b></div>
+  </details>
+  <details class="group" data-group="map">
+    <summary>Map objects</summary>
+    <div class="row"><span>Heights recorded</span><b id="mapHeights">–</b></div>
+    <div class="row"><span>Battery stack</span><b id="mapBattery">–</b></div>
+    <div class="row"><span>Loot bag</span><b id="mapLootBag">–</b></div>
+    <div class="buttons">
+      <button id="batteryPick" title="Then middle-click the batteries in your inventory">Pick battery</button>
+      <button id="lootBagPick" title="Then middle-click the loot bag in your inventory">Pick loot bag</button>
+      <button id="xpProbe" title="Then middle-click where your XP drops appear; records 20 s to xpprobe.log">Probe XP drops</button>
+      <button id="clickProbe" title="For 15 s (press again to stop), records the images drawn around the mouse and every click to clickprobe.log: the click cross and the mouseover text">Probe clicks</button>
+    </div>
+    <div id="pickHint" class="muted" hidden></div>
+    <div id="xpProbeState" class="muted" hidden></div>
+    <div class="muted">Tag the chest, safe or corpse behind a crevice, pick it in the list above, then:</div>
+    <div class="buttons"><button id="creviceToggle">Behind crevice ⇄</button></div>
+    <div id="creviceList" class="muted"></div>
+  </details>
+  <details class="group" data-group="entrance">
+    <summary>Entrance area</summary>
+    <div class="muted">Where the panel stays open between runs. Press A and middle-click a tile for one corner of the area, then B and middle-click the opposite corner. The tiles don't have to be reachable.</div>
+    <div class="buttons">
+      <button id="entranceA">Corner A</button>
+      <button id="entranceB">Corner B</button>
+      <button id="entranceClear">Clear</button>
+    </div>
+    <div id="entranceState" class="muted"></div>
+    <label class="toggle"><input type="checkbox" id="entranceAlways"> Keep panel open everywhere</label>
+  </details>
+  <details class="group" data-group="compare">
+    <summary>Before / after check</summary>
+    <div class="muted">Tag an object, set it as before; change its state, tag it again, set it as after.</div>
+    <div class="buttons">
+      <button id="compareBefore">Set as before</button>
+      <button id="compareAfter">Set as after</button>
+      <button id="compareClear">Clear</button>
+    </div>
+    <table class="compare" id="compareTable" hidden></table>
+    <div id="compareVerdict"></div>
+  </details>
+  <details class="group" data-group="watch">
+    <summary>Watch object</summary>
+    <div class="muted">Pick a centre, size the area (green square in game), let it learn the background, open the window, trigger the change, close the window.</div>
+    <div class="buttons">
+      <button id="watchStart">Watch selected</button>
+      <button id="watchHere">Watch my tile</button>
+      <button id="watchMaze" title="Watch the whole section 4 centre room (radius 16)">Watch maze</button>
+      <button id="captureScreen" title="Save the next screen image to the plugin's config folder">Capture screen</button>
+    </div>
+    <div class="row">
+      <span>Area <button id="watchSmaller">−</button> <b id="watchRadius">2</b> <button id="watchBigger">+</button> tiles</span>
+    </div>
+    <div class="buttons">
+      <button id="watchArm" hidden>Open window</button>
+      <button id="watchClose" hidden>Close window</button>
+      <button id="watchClear">Clear</button>
+    </div>
+    <div id="watchState" class="muted"></div>
+    <div id="watchItems"></div>
+  </details>
+  <details class="group" data-group="links">
+    <summary>Anchor links <span id="linkCount" class="muted"></span></summary>
+    <div id="linkIdle" class="buttons"><button id="linkStart" class="anchor">Link an anchor</button></div>
+    <div id="linkSteps" hidden>
+      <div id="linkInstruction"></div>
+      <div id="linkMessage" class="warn"></div>
+      <div class="buttons" id="linkButtons"></div>
+    </div>
+  </details>
 </section>
 
 <script>
@@ -195,11 +226,31 @@
   byId("levelThieving").addEventListener("change", () => send("level:thieving"));
   byId("levelAgility").addEventListener("change", () => send("level:agility"));
   byId("mazeToggle").addEventListener("change", () => send("level:maze"));
+  byId("ghostsToggle").addEventListener("change", () => send("level:ghosts"));
+  byId("ghostsUnseenToggle").addEventListener("change", () => send("level:ghostsUnseen"));
+  byId("devToolsToggle").addEventListener("change", () => send("devtools"));
+  const GROUPS_KEY = "heist-helper:open-groups";
+  const readOpenGroups = () => {
+    try { return JSON.parse(localStorage.getItem(GROUPS_KEY) || "[]"); } catch { return []; }
+  };
+  document.querySelectorAll("details.group").forEach((group) => {
+    group.open = readOpenGroups().includes(group.dataset.group);
+    group.addEventListener("toggle", () => {
+      const open = [...document.querySelectorAll("details.group[open]")].map((g) => g.dataset.group);
+      try { localStorage.setItem(GROUPS_KEY, JSON.stringify(open)); } catch {}
+    });
+  });
   document.querySelectorAll("#checkpointButtons button").forEach((button) => {
     button.addEventListener("click", () => send(`checkpoint:${button.dataset.checkpoint}`));
   });
   byId("batteryPick").addEventListener("click", () => send("battery"));
   byId("lootBagPick").addEventListener("click", () => send("lootbag"));
+  byId("xpProbe").addEventListener("click", () => send("xpdrops"));
+  byId("clickProbe").addEventListener("click", () => send("clickprobe"));
+  byId("entranceA").addEventListener("click", () => send("entrance:a"));
+  byId("entranceB").addEventListener("click", () => send("entrance:b"));
+  byId("entranceClear").addEventListener("click", () => send("entrance:clear"));
+  byId("entranceAlways").addEventListener("change", () => send("entrance:always"));
   byId("creviceToggle").addEventListener("click", () => send(`crevice:${selectedRank}`));
   byId("tag").addEventListener("click", () => send("tag"));
   byId("markTile").addEventListener("click", () => send("marktile"));
@@ -401,11 +452,25 @@
   const render = (s) => {
     byId("sectionTitle").textContent = s.section ? `Section ${s.section}` : "Section –";
     byId("currentCounts").innerHTML = counts(s.current, "Section complete");
+    if (s.lobby) {
+      const last = s.runs && s.runs.last;
+      byId("sectionTitle").textContent = "Entrance";
+      byId("currentCounts").innerHTML = last
+        ? `<span class="muted">Last run <b>${last.time}</b> · loot <b>${last.loot}</b></span>`
+        : `<span class="muted">No runs recorded yet</span>`;
+    }
+    byId("chatWarn").hidden = !s.chat;
+    byId("chatWarn").textContent = s.chat === "scrolled"
+      ? "Chat is scrolled up: corpses and catches aren't counted until it's at the bottom."
+      : "Can't read chat: corpses and catches aren't counted. Keep the chat box open, timestamps on.";
     byId("totalCounts").innerHTML = counts(s.anchored ? s.total : null, "Vault complete");
     byId("bagTotal").textContent = s.anchored ? `${s.loot || 0}/500` : "–";
     const splits = s.splits || [];
     const here = splits.find((x) => x.section === s.section);
     byId("sectionLoot").textContent = here ? `${here.gained}/${here.potential}` : "–";
+    const runs = s.runs || { session: 0, lifetime: 0 };
+    byId("runsRow").innerHTML = `<span>Runs <b>${runs.session}</b> session · <b>${runs.lifetime}</b> total</span>`
+      + (runs.average ? `<span>avg <b>${runs.average}</b> best <b>${runs.best}</b></span>` : "");
     byId("splitRow").innerHTML = splits.length
       ? splits.map((x) => `<span class="${x.section === s.section ? "here" : ""}">${x.section} <b>${x.gained}/${x.potential}</b></span>`).join("")
       : [1, 2, 3, 4].map((n) => `<span>${n} <b>–</b></span>`).join("");
@@ -414,6 +479,8 @@
     byId("levelThieving").checked = !!(s.levels && s.levels.thieving);
     byId("levelAgility").checked = !!(s.levels && s.levels.agility);
     byId("mazeToggle").checked = !!(s.levels && s.levels.maze);
+    byId("ghostsToggle").checked = !!(s.levels && s.levels.ghosts);
+    byId("ghostsUnseenToggle").checked = !!(s.levels && s.levels.ghostsUnseen);
     renderMapping(s.mapping);
     byId("mazeState").textContent = s.maze
       ? `${s.maze.capturing ? "capturing…, " : ""}${s.maze.lit} lit${s.maze.leg ? `, ${s.maze.leg}` : ""}${s.maze.known ? ", known maze" : ""}${s.maze.route != null ? `, route ${s.maze.route} ticks` : ""}`
@@ -424,16 +491,35 @@
       button.classList.toggle("on", !!(r && r.ok));
       button.textContent = `${button.dataset.row[0].toUpperCase()}${button.dataset.row.slice(1)}${r && !r.ok && r.ends ? ` ${r.ends}/2` : ""}`;
     });
+    const area = s.entrance || {};
+    byId("entranceA").classList.toggle("on", !!area.a || s.pickTarget === "entrancea");
+    byId("entranceB").classList.toggle("on", !!area.b || s.pickTarget === "entranceb");
+    byId("entranceA").textContent = s.pickTarget === "entrancea" ? "Corner A: click a tile…" : "Corner A";
+    byId("entranceB").textContent = s.pickTarget === "entranceb" ? "Corner B: click a tile…" : "Corner B";
+    byId("entranceAlways").checked = !!area.always;
+    byId("entranceState").textContent = area.a && area.b ? `Area from ${area.a} to ${area.b}`
+      : area.a || area.b ? `One corner marked (${area.a || area.b}); mark the other`
+      : "No area marked: using the bundled entrance area (2487–2495, 7577–7584)";
     byId("dev").hidden = !s.dev;
     document.documentElement.style.overflowY = s.dev ? "auto" : "hidden";
     byId("devToggle").classList.toggle("on", !!s.dev);
+    byId("devToggle").hidden = !s.devTools;
+    byId("devToolsToggle").checked = !!s.devTools;
     byId("tag").classList.toggle("on", !!s.tagArmed);
     byId("tagHint").hidden = !s.tagArmed;
     byId("batteryPick").classList.toggle("on", s.pickTarget === "battery");
     byId("lootBagPick").classList.toggle("on", s.pickTarget === "lootbag");
     byId("pickHint").hidden = !s.pickTarget;
-    byId("pickHint").textContent = s.pickTarget === "lootbag"
-      ? "Middle-click the loot bag in your inventory…" : "Middle-click the batteries in your inventory…";
+    byId("pickHint").textContent = s.pickTarget === "lootbag" ? "Middle-click the loot bag in your inventory…"
+      : s.pickTarget === "entrancea" || s.pickTarget === "entranceb" ? "Middle-click the tile for that corner…"
+      : s.pickTarget === "xpdrops" ? "Middle-click where your XP drops appear, then crack a safe…"
+      : "Middle-click the batteries in your inventory…";
+    byId("xpProbe").classList.toggle("on", s.pickTarget === "xpdrops" || !!s.xpProbe);
+    byId("clickProbe").classList.toggle("on", !!s.clickProbe);
+    const probing = s.xpProbe || s.clickProbe;
+    byId("xpProbeState").hidden = !probing;
+    byId("xpProbeState").textContent = probing
+      ? `Recording ${s.xpProbe ? "XP drops" : "clicks"}: ${probing.seconds} s left, ${probing.appearances} images seen` : "";
     renderCandidates(s.lastTag);
     renderLink(s.link, s.linkCount);
     renderCompare(s.compare);
@@ -456,7 +542,10 @@
     const first = lastRendered === null;
     lastRendered = key;
     render(status);
-    if (first) repaint();
+    if (first) {
+      repaint();
+      requestAnimationFrame(() => requestAnimationFrame(() => send("painted")));
+    }
   });
 
   const repaint = () => {

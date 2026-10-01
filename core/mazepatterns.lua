@@ -1,6 +1,6 @@
 local M = {}
 
-M.MIN_INSIDE = 6
+M.MIN_INSIDE = 4
 M.MIN_MARGIN = 3
 
 local key = function(dx, dz)

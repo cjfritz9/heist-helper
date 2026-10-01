@@ -33,6 +33,15 @@ local watch = require("game.watch")
 local inventory = require("game.inventory")
 local mazegrid = require("game.mazegrid")
 local mazeroute = require("game.mazeroute")
+local visionrings = require("game.visionrings")
+local ticksync = require("game.ticksync")
+local xpprobe = require("game.xpprobe")
+local clickprobe = require("game.clickprobe")
+local clicks = require("game.clicks")
+local xpdrops = require("game.xpdrops")
+local runlog = require("core.runlog")
+local minimap = require("game.minimap")
+local entrance = require("game.entrance")
 local lootcounter = require("game.lootcounter")
 local chatModule = require("modules.chat.chat")
 local seedMarkers = require("data.markers")
@@ -148,6 +157,16 @@ local markerData = (savedMarkers and markerstore.decode(savedMarkers)) or marker
 
 local chatLog = rollinglog.new(bolt.loadconfig(CHAT_FILE), LOG_LINES)
 local chatReader = chatlog.new(chatModule)
+local lastChatProblem = nil
+local chatProblem = function()
+  local problem = chatlog.problem(chatReader, bolt.time())
+  if problem ~= lastChatProblem then
+    lastChatProblem = problem
+    lootcounter.append(problem and ("chat can't be read: " .. (problem == "scrolled" and "scrolled up" or "chat box not found"))
+      or "chat readable again")
+  end
+  return problem
+end
 
 local recordText = bolt.loadconfig(RECORD_FILE) or ""
 local recordDirty = false
@@ -246,7 +265,13 @@ local saveRun = function()
   bolt.saveconfig(RUN_FILE, runstate.encode(run))
 end
 lootcounter.init(bolt, run, saveRun)
-mazeroute.init(bolt, lootcounter.append)
+mazeroute.init(bolt, lootcounter.append, ticksync.nextTick, ticksync.boundary)
+ticksync.init(bolt)
+xpprobe.init(bolt, ticksync.nextTick)
+clickprobe.init(bolt, ticksync.nextTick)
+entrance.init(bolt)
+lootcounter.onPopupAppear(ticksync.popup)
+visionrings.init(bolt, lootcounter.append, ticksync.ghostStart, ticksync.boundary)
 
 local syncMarkersToAnchor = function()
   if run.anchor then
@@ -262,17 +287,50 @@ local applyAnchor = function(a)
   end
 end
 
+local runFinished = false
+local runHistory = { file = "runs.csv" }
+runHistory.rows = runlog.decode(bolt.loadconfig(runHistory.file))
+runHistory.sessionFrom = #runHistory.rows
+
+local runStats = function()
+  local stats = runlog.stats(runHistory.rows, runHistory.sessionFrom)
+  return { session = stats.session, lifetime = stats.lifetime, last = stats.last,
+    average = stats.average and runlog.clock(stats.average), best = stats.best and runlog.clock(stats.best) }
+end
+
+local MINIMAP_GHOST_PIXELS = 6
+local MINIMAP_GHOST_COLOUR = { 255, 50, 50, 255 }
+local MINIMAP_GHOST_ESTIMATE_COLOUR = { 255, 190, 60, 255 }
+local drawMinimap = function()
+  if not player or not run.anchor then return end
+  local dots = {}
+  for _, o in ipairs(status.remaining(run, objectMap, playerLevels)) do
+    local rgb = objectDraw.COLOURS[o.kind]
+    if rgb then dots[#dots + 1] = { dx = o.dx, dz = o.dz, y = o.y, colour = { rgb[1], rgb[2], rgb[3], 255 } } end
+  end
+  if playerLevels.ghosts then
+    for _, g in ipairs(visionrings.minimapGhosts()) do
+      dots[#dots + 1] = { dx = g.dx, dz = g.dz, y = g.y, size = MINIMAP_GHOST_PIXELS,
+        colour = g.synced and MINIMAP_GHOST_COLOUR or MINIMAP_GHOST_ESTIMATE_COLOUR }
+    end
+  end
+  minimap.draw(bolt, run.anchor, player.height, dots)
+end
+
 local inVault = function()
   return player ~= nil and anchor.inVault(run.anchor, player.tileX, player.tileZ)
 end
 
 local recordChat = function(message)
   local _, text = chatlines.split(message)
+  if text == "WelcometoRuneScape." then lootcounter.loggedIn(bolt.time()) end
+  if active then guarded("ticks", ticksync.chat, bolt.time()) end
   recorder.note(bolt.time(), message, appendRecord)
   local event = runstate.chatEvent(text)
   if event == "loot" and player then
     local k, count = runstate.recordLoot(run, objectsInView, player.tileX, player.tileZ)
     if k then
+      guarded("rings", visionrings.noteRummage, bolt.time(), k)
       local corpse = objectMap.index["corpse," .. k]
       lootcounter.action(bolt.time(), "corpse", corpse and corpse.section)
       lootcounter.append(string.format("detected rummage %d/%d on corpse %s", count, runstate.RUMMAGES_PER_CORPSE, k))
@@ -286,10 +344,17 @@ local recordChat = function(message)
       saveRun()
     end
   elseif event == "caught" then
-    lootcounter.caught()
+    local wrongStep = mazeroute.recentlyInMaze(bolt.time())
+    lootcounter.caught(wrongStep)
+    if not wrongStep then guarded("rings", visionrings.caught, run.anchor, player) end
   elseif event == "runComplete" then
-    runstate.resetRun(run)
-    saveRun()
+    local seconds = runlog.parseTime(text)
+    if seconds and not runFinished then
+      runHistory.rows[#runHistory.rows + 1] = { seconds = seconds, loot = run.loot or 0 }
+      bolt.saveconfig(runHistory.file, runlog.encode(runHistory.rows))
+    end
+    runFinished = true
+    lootcounter.append("run complete: kept until you're teleported out")
   end
   if inVault() then
     lootcounter.append("chat: " .. text)
@@ -350,7 +415,7 @@ local updatePlayer = function()
     applyAnchor(arrival)
     saveRun()
   end
-  player = { tileX = tile.tileX, tileZ = tile.tileZ, height = y }
+  player = { tileX = tile.tileX, tileZ = tile.tileZ, height = y, x = x, z = z }
   if run.anchor and runstate.setSection(run,
     checkpoints.at(checkpointSet, tile.tileX - run.anchor.x, tile.tileZ - run.anchor.z, y)) then
     saveRun()
@@ -561,15 +626,58 @@ local checkAnchorClick = function()
   end
 end
 
+local CRYSTAL_NOTE_TILES = 8
+local crystalClickedAt = nil
+local CRYSTAL_HEIGHT_UNITS = 900
+local CRYSTAL_MIN_HALF_PIXELS = 25
+local crystalBox = function(o)
+  if not viewProj or not o.y then return nil end
+  local project = function(height)
+    local sx, sy, depth = bolt.point((o.tileX + 0.5) * 512, o.y + height, (o.tileZ + 0.5) * 512):transform(viewProj):togameview()
+    if not depth or depth <= 0 or depth > 1 then return nil end
+    return sx, sy
+  end
+  local bx, by = project(0)
+  local tx, ty = project(CRYSTAL_HEIGHT_UNITS)
+  if not bx or not tx then return nil end
+  local half = math.max(CRYSTAL_MIN_HALF_PIXELS, math.abs(by - ty) * 0.45)
+  return { math.min(bx, tx) - half, math.min(by, ty) - half / 2, math.max(bx, tx) + half, math.max(by, ty) + half / 2 }
+end
 local noticeAnchorClick = function(x, y)
   if not run.anchor then return end
   local vx, vy = bolt.gameviewxywh()
   if playerLevels.maze then
+    local near = {}
     for _, o in ipairs(objectsInView) do
-      if o.kind == "shadowCrystal" and anchorclick.contains(o.points, x - vx, y - vy) then
-        mazeroute.trigger(bolt.time(), o.tileX - run.anchor.x, o.tileZ - run.anchor.z)
-        return
+      if o.kind == "shadowCrystal" then
+        local box = crystalBox(o)
+        local px, py = x - vx, y - vy
+        local onBox = box and px >= box[1] and px <= box[3] and py >= box[2] and py <= box[4]
+        if anchorclick.contains(o.points, px, py) or onBox then
+          if not anchorclick.contains(o.points, px, py) then
+            lootcounter.append("maze: crystal click caught by its position, not its outline")
+          end
+          if not (crystalClickedAt and bolt.time() - crystalClickedAt < 1500 * 1000) then
+            crystalClickedAt = bolt.time()
+            mazeroute.trigger(bolt.time(), o.tileX - run.anchor.x, o.tileZ - run.anchor.z)
+          end
+          return
+        end
+        if player and math.max(math.abs(o.tileX - player.tileX), math.abs(o.tileZ - player.tileZ)) <= CRYSTAL_NOTE_TILES then
+          local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+          for _, p in ipairs(o.points or {}) do
+            minX, maxX, minY, maxY = math.min(minX, p[1]), math.max(maxX, p[1]), math.min(minY, p[2]), math.max(maxY, p[2])
+          end
+          local box = crystalBox(o)
+          near[#near + 1] = string.format("%d,%d (outline %s, position box %s)", o.tileX - run.anchor.x, o.tileZ - run.anchor.z,
+            minX < math.huge and string.format("%d,%d-%d,%d", minX, minY, maxX, maxY) or "none",
+            box and string.format("%d,%d-%d,%d", box[1], box[2], box[3], box[4]) or "none")
+        end
       end
+    end
+    if #near > 0 then
+      lootcounter.append(string.format("maze: left click at %d,%d (game view %d,%d) not on the crystal in view at %s", x, y,
+        x - vx, y - vy, table.concat(near, " ")))
     end
   end
   for _, o in ipairs(objectsInView) do
@@ -584,11 +692,33 @@ local noticeAnchorClick = function(x, y)
   end
 end
 
+local crystalSeen = function(result)
+  if result.kind ~= "interact" or not run.anchor or not player or not playerLevels.maze then return end
+  if crystalClickedAt and result.at - crystalClickedAt < 1500 * 1000 then return end
+  local best, bestDistance = nil, nil
+  for _, o in ipairs(objectsInView) do
+    if o.kind == "shadowCrystal" then
+      local d = math.max(math.abs(o.tileX - player.tileX), math.abs(o.tileZ - player.tileZ))
+      local box = not result.name and crystalBox(o)
+      local onBox = box and result.x - box[1] >= -60 and result.x - box[3] <= 60 and result.y - box[2] >= -60 and result.y - box[4] <= 60
+      if (result.name == "shadowCrystal" or onBox) and d <= 15 and (not bestDistance or d < bestDistance) then best, bestDistance = o, d end
+    end
+  end
+  if not best then return end
+  crystalClickedAt = result.at
+  lootcounter.append(string.format("maze: crystal click seen from the game's interaction cross%s",
+    result.name and " and the mouseover text" or " next to the crystal (no mouseover text)"))
+  mazeroute.trigger(result.at, best.tileX - run.anchor.x, best.tileZ - run.anchor.z)
+end
+clicks.init(crystalSeen)
+lootcounter.alsoWantGlyph(clicks.wants)
+
 local processInventory = function()
   local icons, glyphs, images = inventory.takeFrame()
   if #icons > 0 then
     lastIcons = icons
   end
+  clicks.frame(glyphs, bolt.time())
   lootcounter.frame(icons, glyphs, images, lastIcons, player ~= nil and run.anchor ~= nil)
   if not player or not run.anchor then return end
   local now = bolt.time()
@@ -867,20 +997,42 @@ bolt.onmousemotion(function(event)
   local x, y = event:xy()
   mouse = { x = x, y = y }
   lootcounter.setMouse(x, y)
+  clickprobe.mouseAt(x, y)
+  clicks.mouseAt(x, y)
 end)
 
 bolt.onmousebutton(function(event)
+  if active then clickprobe.clicked(event:button(), event:xy()) end
   if active and event:button() == LEFT_BUTTON then
+    local cx, cy = event:xy()
+    clicks.click(cx, cy, bolt.time())
+  end
+  if active and event:button() == LEFT_BUTTON then
+    guarded("maze", mazeroute.click, bolt.time(), event:xy())
     guarded("inventory", noticeAnchorClick, event:xy())
     return
   end
-  if not active or event:button() ~= MIDDLE_BUTTON then
+  if event:button() ~= MIDDLE_BUTTON then
+    return
+  end
+  if pickTarget == "entrancea" or pickTarget == "entranceb" then
+    local x, y = event:xy()
+    guarded("entrance", entrance.pick, pickTarget:sub(-1), viewProj, player, x, y)
+    pickTarget = nil
+    return
+  end
+  if not active then
     return
   end
   if pickTarget and not event:ctrl() and not event:shift() and not event:alt() then
     local target = pickTarget
     pickTarget = nil
-    pickIcon(target, event:xy())
+    if target == "xpdrops" then
+      local x, y = event:xy()
+      guarded("xp", xpprobe.start, x, y, bolt.time())
+    else
+      pickIcon(target, event:xy())
+    end
     return
   end
   if event:ctrl() or (tagArmed and not event:shift() and not event:alt()) then
@@ -904,6 +1056,16 @@ panel.init(bolt, {
   tag = function() tagArmed = not tagArmed end,
   battery = function() pickTarget = pickTarget ~= "battery" and "battery" or nil end,
   lootbag = function() pickTarget = pickTarget ~= "lootbag" and "lootbag" or nil end,
+  xpdrops = function() pickTarget = pickTarget ~= "xpdrops" and "xpdrops" or nil end,
+  clickprobe = function() guarded("probe", clickprobe.toggle, bolt.time()) end,
+  entrance = function(argument)
+    if argument == "a" or argument == "b" then
+      local target = "entrance" .. argument
+      pickTarget = pickTarget ~= target and target or nil
+    else
+      entrance.command(argument)
+    end
+  end,
   marktile = function()
     if SHOW_TILE_MARKERS then atPlayer(toggleMarker) end
   end,
@@ -945,6 +1107,7 @@ bolt.onrender3d(function(event)
   viewProj = event:viewprojmatrix()
   guarded("objects", objectScan.inspect, bolt, event, player and player.tileX, player and player.tileZ)
   if not active then return end
+  guarded("rings", visionrings.inspect, event)
   if picker.collecting() then
     guarded("tag", picker.inspect, bolt, event)
   end
@@ -980,6 +1143,17 @@ bolt.onrender2d(function(event)
   if not active then return end
   guarded("chat", chatlog.read, chatReader, bolt.time(), event, recordChat)
   guarded("inventory", inventory.inspect2d, event, lootcounter.want)
+  if xpprobe.active() then guarded("xp", xpprobe.inspect2d, event) end
+  if clickprobe.active() then guarded("probe", clickprobe.inspect2d, event) end
+  guarded("xp", xpdrops.inspect2d, event)
+end)
+
+bolt.onminimapterrain(function(event)
+  if active then guarded("minimap", minimap.terrain, event) end
+end)
+
+bolt.onrenderminimap(function(event)
+  if active then guarded("minimap", minimap.render, event) end
 end)
 
 bolt.onrendericon(function(event)
@@ -991,7 +1165,28 @@ bolt.onswapbuffers(function()
   guarded("player", updatePlayer)
   guarded("loot", lootcounter.updatePlayerScreen, viewProj)
   active = inVault()
-  guarded("panel", panel.setVisible, active)
+  if runFinished and not active and player then
+    runFinished = false
+    runstate.resetRun(run)
+    saveRun()
+    lootcounter.append(string.format("teleported out after completing the run: run reset (landed on tile %d, %d)",
+      player.tileX, player.tileZ))
+  elseif not active and runstate.inProgress(run) and entrance.atEntrance(player) then
+    runstate.resetRun(run)
+    saveRun()
+    lootcounter.append(string.format("left the vault before finishing: run reset (now on tile %d, %d)", player.tileX, player.tileZ))
+  end
+  if active then
+    guarded("ticks", ticksync.frame, bolt.time(), player)
+    guarded("xp", xpdrops.endFrame, bolt.time(), ticksync.xpDrop)
+  end
+  if xpprobe.active() or clickprobe.active() then
+    guarded("xp", xpprobe.endFrame, bolt.time())
+    guarded("probe", clickprobe.endFrame, bolt.time())
+  end
+  local inLobby = not active and entrance.showPanel(player)
+  guarded("panel", panel.setVisible, active or inLobby, player and string.format("%s, you on tile %d, %d",
+    active and "in the vault" or (inLobby and "near the entrance" or "away from both"), player.tileX, player.tileZ))
   local finished = picker.advance()
   if finished then
     saveTag(finished)
@@ -1012,9 +1207,14 @@ bolt.onswapbuffers(function()
   local seenObjects, watchedModels, selectedPoints = objectScan.takeFrame()
   guarded("highlight", processObjects, seenObjects, watchedModels, selectedPoints)
   if active then
+    guarded("maze", mazeroute.notePlayer, run, player, bolt.time())
     guarded("maze", mazeroute.frame, run, player, viewProj, MAZE_CENTRE, playerLevels.maze, bolt.time())
     panel.capture(shots.pending)
     guarded("maze", mazeroute.draw, run, player, viewProj)
+    guarded("rings", visionrings.endFrame, bolt.time(), run.anchor, player)
+    guarded("minimap", drawMinimap)
+    visionrings.showUnseen(playerLevels.ghostsUnseen)
+    if playerLevels.ghosts then guarded("rings", visionrings.draw, viewProj) end
   else
     guarded("maze", mazeroute.stop)
   end
@@ -1026,6 +1226,15 @@ bolt.onswapbuffers(function()
     guarded("watch", flushWatchRaw, bolt.time())
   end
   guarded("record", flushRecord, bolt.time())
+  if panel.devEnabled() and (active or inLobby) then guarded("entrance", entrance.draw, viewProj, player) end
+  if inLobby then
+    local lobbyStatus = status.build(run, objectMap, nil, playerLevels)
+    lobbyStatus.lobby = true
+    lobbyStatus.runs = runStats()
+    lobbyStatus.entrance = entrance.status()
+    lobbyStatus.pickTarget = pickTarget
+    guarded("panel", panel.update, bolt.time(), lobbyStatus)
+  end
   if not active then return end
   local panelStatus = status.build(run, objectMap, run.anchor and run.section, playerLevels)
   if panel.devEnabled() then
@@ -1037,9 +1246,14 @@ bolt.onswapbuffers(function()
   end
   panelStatus.tagArmed = tagArmed
   panelStatus.pickTarget = pickTarget
+  panelStatus.xpProbe = xpprobe.status(bolt.time())
+  panelStatus.clickProbe = clickprobe.status(bolt.time())
   panelStatus.maze = mazeroute.status()
   panelStatus.loot = run.loot
+  panelStatus.runs = runStats()
+  panelStatus.entrance = entrance.status()
   panelStatus.lastTag = lastTag
+  panelStatus.chat = chatProblem()
   panelStatus.link = linkwizard.status(wizard)
   panelStatus.linkCount = #linkSet.list
   panelStatus.compare = comparisonStatus()

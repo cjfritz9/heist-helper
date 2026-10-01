@@ -22,6 +22,17 @@
 /capture-*.ppm
 /capture-*.csv
 /maze.csv
+/ghosts.log
+/ghostroutes.csv
+/ghostroutes-noheight.csv
+/ghostruns.csv
+/ghosts-run-*.log
+/ticks.log
+/xpprobe.log
+/clickprobe.log
+/runs.csv
+/panel.log
+/entrance.csv
 
 # Anything credential-shaped
 creds

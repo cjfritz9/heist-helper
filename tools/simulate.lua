@@ -13,7 +13,10 @@ point = function(x, y, z)
   return {
     get = function() return x, y, z end,
     transform = function(self, m) return m(self) end,
-    togameview = function() return 100 + x % 7, 200 + z % 5, 0.5 end,
+    togameview = function()
+      if linearView then return (x / 512 - 11850) * 30, (z / 512 - 4100) * 30 - (y - 2176) / 512 * 15, 0.5 end
+      return 100 + x % 7 + cameraShift, 200 + z % 5, 0.5
+    end,
     toscreen = function() return 100, 200, 0.5 end,
   }
 end
@@ -22,6 +25,9 @@ local surface = function()
 end
 
 local silentPages = false
+blankPages = false
+cameraShift = 0
+linearView = false
 
 local bolt = {
   checkversion = function() end,
@@ -50,7 +56,10 @@ local bolt = {
     local b = { url = url, sent = {} }
     b.onmessage = function(self, f)
       self.message = f
-      if url == "plugin://ui/panel.html" and not silentPages then f("ready") end
+      if url == "plugin://ui/panel.html" and not silentPages then
+        f("ready")
+        if not blankPages then f("painted") end
+      end
     end
     b.onreposition = function(self, f) self.reposition = f end
     b.oncloserequest = function() end
@@ -64,6 +73,9 @@ local bolt = {
     return b
   end,
   onrenderbillboard = function(f) handlers.billboard = f end,
+  onminimapterrain = function(f) handlers.minimapTerrain = f end,
+  onrenderminimap = function(f) handlers.renderMinimap = f end,
+  gamewindowsize = function() return 1920, 1080 end,
   onrendericon = function(f) handlers.icon = f end,
   onmousemotion = function(f) handlers.motion = f end,
 }
@@ -192,6 +204,17 @@ print("highlighted after chest opened:", "[" .. table.concat(lastHighlighted, " 
 
 chatQueue = { "[23:20:00]CompletionTime:19:25.2" }
 handlers.r2d(chatEvent)
+handlers.swap()
+print("completed but still in the vault, run kept:", (files["run.csv"] or ""):find("corpse,8,4") ~= nil)
+print("runs.csv after completing:", (files["runs.csv"] or "<none>"):gsub("\n", " | "))
+handlers.swap()
+print("panel run stats:", (handlers.browser.sent[#handlers.browser.sent] or ""):match('"runs":{[^}]*}'))
+local finishedAt = playerPos
+playerPos = { 3297 * 512, 2005, 3184 * 512 }
+handlers.swap()
+print("teleported out, run reset:", (files["run.csv"] or ""):find("corpse,8,4") == nil)
+playerPos = finishedAt
+handlers.swap()
 print("run.csv after completion:", files["run.csv"])
 print("chat.log:", files["chat.log"])
 
@@ -261,6 +284,12 @@ for _ = 1, 3 do frame(true) end
 print("panel url:", handlers.browser.url)
 handlers.browser.message("dev")
 print("panel reopened with dev:", handlers.browser.url, files["panel.csv"])
+handlers.browser.message("devtools")
+print("developer tools on, saved:", files["panel.csv"])
+handlers.browser.message("devtools")
+print("developer tools off closes dev:", files["panel.csv"])
+handlers.browser.message("devtools")
+handlers.browser.message("dev")
 local panelBrowser = handlers.browser
 panelBrowser.message("tag")
 playerPos = { (11875 + 30) * 512, 261, (4203 - 30) * 512 }
@@ -586,10 +615,65 @@ for i = 1, 8 do lootFrame(popupLine("2LootGained", 130 - i * 20)) end
 settle()
 settle()
 print("popup flying off, not recounted:", lootNow() - before)
+require("core.visionring").FINGERPRINT = fpFor(77)
+local ringTileX, ringTileZ = math.floor(playerPos[1] / 512) - 3, math.floor(playerPos[3] / 512)
+drawnLines = 0
+handlers.swap()
+local withoutRing = drawnLines
+drawnLines = 0
+handlers.r3d(modelEvent(6144, 77, ringTileX, ringTileZ, false))
+handlers.swap()
+print("vision ring outline drawn:", drawnLines > withoutRing, drawnLines - withoutRing, "vertices")
+handlers.r3d(modelEvent(6144, 77, ringTileX, ringTileZ, false))
+handlers.swap()
 chatQueue = { "[23:50:00]Youhavebeencaught...Youlosesomeloot." }
 clock = clock + 0.6e6
 handlers.r2d(chatEvent)
 print("after a catch:", lootNow() - before)
+clock = clock + 3e6
+require("game.lootcounter").flush(clock)
+for _ = 1, 3 do
+  handlers.r3d(modelEvent(6144, 77, ringTileX + 1, ringTileZ, false))
+  handlers.swap()
+end
+clock = clock + 3e6
+handlers.swap()
+print("ghostroutes.csv:", (files["ghostroutes.csv"] or "<none>"):gsub("\n", " "))
+local spawnX, spawnZ = ringTileX - 11875 + 10, ringTileZ - 4203
+require("game.visionrings").noteRummage(clock, (spawnX - 1) .. "," .. spawnZ)
+for _ = 1, 10 do
+  handlers.r3d(modelEvent(6144, 77, 11875 + spawnX, 4203 + spawnZ, false))
+  clock = clock + 1e5
+  handlers.swap()
+end
+drawnLines = 0
+handlers.r3d(modelEvent(6144, 77, 11875 + spawnX, 4203 + spawnZ, false))
+handlers.swap()
+local withTimer = drawnLines
+for _ = 1, 80 do
+  handlers.r3d(modelEvent(6144, 77, 11875 + spawnX, 4203 + spawnZ, false))
+  clock = clock + 1e5
+  handlers.swap()
+end
+drawnLines = 0
+handlers.r3d(modelEvent(6144, 77, 11875 + spawnX, 4203 + spawnZ, false))
+handlers.swap()
+print("spawn countdown bar a second in (background and 12 cells, 6 vertices each = 78), gone after 12 ticks:",
+  withTimer - drawnLines)
+clock = clock + 3e6
+handlers.swap()
+for _ = 1, 5 do
+  handlers.r3d(modelEvent(6144, 77, 11875 + spawnX + 20, 4203 + spawnZ, false))
+  clock = clock + 1.5e6
+  handlers.swap()
+end
+clock = clock + 3e6
+handlers.swap()
+print("ghosts.log:")
+for line in (files["ghosts.log"] or "<none>"):gmatch("[^\n]+") do print("  " .. line:sub(1, 140)) end
+for line in (files["loot.log"] or ""):gmatch("[^\n]+") do
+  if line:find("vision ring") or line:find("caught: ") then print("  " .. line:sub(1, 160)) end
+end
 local tipFont = require("data.tooltipfont")
 local tipEvent = function(text, x, y)
   local xs = {}
@@ -703,10 +787,17 @@ print("capture window after the click:", capturer() ~= nil and capturer().closed
 capturer().message("mazeinfo:ready")
 clock = clock + 0.5e6
 mazeAt(-13, -75)
-print("not capturing during the 1.2 s wait:", capturer().capturing ~= true)
+print("capturing straight after the click:", capturer().capturing == true)
 clock = clock + 1e6
 mazeAt(-13, -75)
 print("first frame of the burst:", capturer().capturing == true)
+local sentBefore = #capturer().sent
+print("capture starts with the view:", capturer().sent[sentBefore]:find('"start":true') ~= nil)
+cameraShift = 10
+mazeAt(-13, -75)
+print("camera turning sends the new view:", #capturer().sent == sentBefore + 1 and capturer().sent[#capturer().sent]:find('"grid":') ~= nil)
+mazeAt(-13, -75)
+print("camera still, nothing more sent:", #capturer().sent == sentBefore + 1)
 local lit = "-12,-77;-11,-77;-10,-77;-9,-77;-8,-77;-8,-76;-8,-75;-8,-74;-8,-73;-8,-72;-1,-82;1,-82;1,-83"
 local frames = 0
 for _ = 1, 6 do
@@ -720,15 +811,94 @@ end
 print("frames captured in the burst:", frames, "window closed after:", capturer().closed == true)
 mazeAt(-12, -75)
 print("maze status on the start row:", require("core.json").encode(mazeroute.status()))
+drawnLines = 0
+mazeAt(-12, -75)
+print("route vertices drawn (7 tiles: line 42, fills 42, borders 168):", drawnLines)
 print("clicking the same crystal again keeps it:", mazeroute.trigger(clock, crystalDx, crystalDz) == false and mazeroute.status().known == true)
-mazeAt(-11, -76)
-print("in-between tile keeps the plan:", require("core.json").encode(mazeroute.status()))
-mazeAt(-10, -77)
-print("landed on step 1:", require("core.json").encode(mazeroute.status()))
-mazeAt(-8, -76)
-print("landed on step 2:", require("core.json").encode(mazeroute.status()))
+local route = function() return mazeroute.status().route end
+for _ = 1, 20 do mazeAt(-12, -75) end
+linearView = true
+mazeAt(-12, -75)
+local tileCentre = function(dx, dz) return ((11875 + dx + 0.5) - 11850) * 30, ((4203 + dz + 0.5) - 4100) * 30 end
+print("click off the route ignored:", mazeroute.click(clock, tileCentre(-11, -70)) == false)
+print("click straight on step 2, two ticks away:", mazeroute.click(clock, tileCentre(-8, -75)) == true, "route still", route())
+local nudge = 0
+local moveWithin = function(dx, dz)
+  nudge = nudge + 40
+  playerPos = { (11875 + dx) * 512 + nudge % 400, 2176, (4203 + dz) * 512 }
+  handlers.r3d(modelEvent(2004, 51, 11875 + crystalDx, 4203 + crystalDz, false))
+  handlers.swap()
+end
+local swaps = 0
+while route() == 7 and swaps < 200 do
+  moveWithin(-12, -75)
+  swaps = swaps + 1
+end
+print("first tick: halfway, step 2 still next:", route(), "after about", swaps * 12, "ms")
+swaps = 0
+while route() == 6 and swaps < 200 do
+  moveWithin(-11, -76)
+  swaps = swaps + 1
+end
+print("second tick: step 2 reached:", route(), "after about", swaps * 12, "ms")
+print("click ahead on step 3 while running:", mazeroute.click(clock, tileCentre(-8, -73)) == true, "route still", route())
+print("and on step 4 before step 3's tick:", mazeroute.click(clock, tileCentre(-8, -71)) == true, "route still", route())
+swaps = 0
+while route() == 5 and swaps < 200 do
+  moveWithin(-9, -75)
+  swaps = swaps + 1
+end
+print("both reached the server before the tick, so it heads for step 4:", route(), "after about", swaps * 12, "ms")
+swaps = 0
+while route() == 4 and swaps < 200 do
+  moveWithin(-8, -73)
+  swaps = swaps + 1
+end
+print("step 4 reached a tick later:", route(), "after about", swaps * 12, "ms")
+for _ = 1, 20 do mazeAt(-8, -73) end
+print("landing on it keeps the plan:", route())
+for _ = 1, 150 do moveWithin(-8, -72) end
+moveWithin(-8, -71)
+print("walked on without clicking, landed on step 4:", route())
+print("click on step 5 while still moving:", mazeroute.click(clock, tileCentre(-6, -70)) == true)
+swaps = 0
+while route() == 3 and swaps < 200 do
+  moveWithin(-7, -71)
+  swaps = swaps + 1
+end
+print("step 5 reached within a tick, from where you are, not where you last stood:", route(), "after about", swaps * 12, "ms")
+for _ = 1, 20 do mazeAt(-4, -70) end
+drawnLines = 0
+mazeAt(-4, -70)
+print("final step next, barrier drawn instead of the tile (panel 6, border 24, line 6):", route(), drawnLines)
+local barrierX, barrierY = ((11875 - 0.5) - 11850) * 30, ((4203 - 69) - 4100) * 30 - 350 / 512 * 15
+print("click on the barrier counts as the last step:", mazeroute.click(clock, barrierX, barrierY) == true)
+moveWithin(-4, -70)
+print("route after setting off for the barrier:", route())
+linearView = false
 mazeAt(-3, -70)
 print("maze status on the end row:", require("core.json").encode(mazeroute.status()))
+local mazeCatch = function()
+  local was = lootNow()
+  chatQueue = { "[23:59:00]Youhavebeencaught...Youlosesomeloot." }
+  handlers.r2d(chatEvent)
+  return lootNow() - was
+end
+mazeAt(-6, -72)
+mazeAt(-12, -75)
+print("wrong step off the maze path:", mazeCatch())
+clock = clock + 3e6
+mazeAt(-14, -75)
+print("caught in the west room, away from the maze:", mazeCatch())
+mazeAt(1, -50)
+print("north crystal clicked from far away:", mazeroute.trigger(clock, 0, -66) == true)
+for _ = 1, 30 do mazeAt(1, -50) end
+print("still pending while running there, no capture yet:", mazeroute.status().capturing == true,
+  capturer().closed == true or capturer().capturing ~= true)
+mazeAt(0, -65)
+capturer().message("mazeinfo:ready")
+mazeAt(0, -65)
+print("reached the crystal, capturing:", capturer().closed ~= true and capturer().capturing == true)
 print("final crystal ignored:", mazeroute.trigger(clock, -6, -95) == false)
 clock = clock + 3e6
 lootFrame()
@@ -800,9 +970,68 @@ silentPages = false
 handlers.browser.message("settings")
 handlers.swap()
 print("ready panel got status:", #handlers.browser.sent > 0)
-playerPos = { 3297 * 512, 2005, 3184 * 512 }
+blankPages = true
+handlers.browser.message("settings")
+local undrawn = handlers.browser
+for _ = 1, 400 do handlers.swap() end
+print("ready but never drew a frame, reopened:", undrawn.closed == true and handlers.browser ~= undrawn)
+blankPages = false
+handlers.browser.message("settings")
+handlers.swap()
+print("panel.log has the story:", (files["panel.log"] or ""):find("never drew a frame") ~= nil, (files["panel.log"] or ""):find("recreated once") ~= nil)
+playerPos = { 2490 * 512, 2005, 7580 * 512 }
+handlers.swap()
+clock = clock + 1e6
+handlers.swap()
+print("run state at the entrance (left mid-run, so reset):", ((files["run.csv"] or ""):gsub("\n", " ")),
+  "left early logged:", (files["loot.log"] or ""):find("left the vault before finishing") ~= nil)
+print("at the entrance, panel stays open:", handlers.browser.closed ~= true,
+  (handlers.browser.sent[#handlers.browser.sent] or ""):match('"lobby":true') ~= nil,
+  (handlers.browser.sent[#handlers.browser.sent] or ""):match('"last":{[^}]*}'))
+playerPos = { 3000 * 512, 2005, 3000 * 512 }
 handlers.swap()
 print("outside vault, panel closed:", handlers.browser.closed == true)
+local standOn = function(x, z)
+  playerPos = { x * 512, 2005, z * 512 }
+  handlers.swap()
+  clock = clock + 1e6
+  handlers.swap()
+end
+playerPos = { 2490 * 512, 2005, 7580 * 512 }
+handlers.swap()
+handlers.browser.message("entrance:always")
+standOn(3000, 3000)
+print("keep-open switch on, panel open far from everything:", handlers.browser.closed ~= true)
+local clickTile = function(x, z)
+  linearView = true
+  handlers.mouse({ button = function() return 3 end, ctrl = function() return false end,
+    shift = function() return false end, alt = function() return false end,
+    xy = function() return (x + 0.5 - 11850) * 30, (z + 0.5 - 4100) * 30 - (2005 - 2176) / 512 * 15 end })
+  linearView = false
+end
+handlers.browser.message("entrance:a")
+clock = clock + 1e6
+handlers.swap()
+print("corner A armed, shown in the panel:",
+  (handlers.browser.sent[#handlers.browser.sent] or ""):match('"pickTarget":"entrancea"') ~= nil)
+clickTile(3000, 3000)
+handlers.browser.message("entrance:b")
+clickTile(3010, 3012)
+standOn(3000, 3000)
+print("corners set by clicking tiles, without walking to them:",
+  (handlers.browser.sent[#handlers.browser.sent] or ""):match('"entrance":{[^}]*}'))
+handlers.browser.message("entrance:always")
+standOn(3005, 3006)
+print("entrance.csv:", (files["entrance.csv"] or ""):gsub("\n", " "))
+print("inside the marked area, panel open:", handlers.browser.closed ~= true,
+  (handlers.browser.sent[#handlers.browser.sent] or ""):match('"entrance":{[^}]*}'))
+standOn(3011, 3006)
+print("one tile outside it, closed:", handlers.browser.closed == true)
+standOn(2490, 7580)
+print("the bundled area no longer counts:", handlers.browser.closed == true)
+standOn(3005, 3006)
+handlers.browser.message("entrance:clear")
+standOn(3000, 3000)
 local before = #lastHighlighted
 handlers.r3d(modelEvent(3444, 1, 11875 + 11, 4203 - 4, false))
 handlers.swap()
@@ -810,4 +1039,104 @@ playerPos = { (11875 + 8) * 512, 4933, (4203 + 5) * 512 }
 handlers.swap()
 print("back inside, panel reopened:", handlers.browser.closed ~= true and handlers.browser.url)
 print("probe.log:\n" .. (files["probe.log"] or "<none>"))
+local xpEvent = function(images)
+  return {
+    verticesperimage = function() return 6 end,
+    vertexcount = function() return 6 * #images end,
+    vertexatlasdetails = function(_, i) local im = images[math.floor((i - 1) / 6) + 1]; return im.ax, 500, 12, 14 end,
+    vertexscaledxy = function(_, i) local im = images[math.floor((i - 1) / 6) + 1]; return im.x, im.y end,
+    vertexcolour = function() return 1, 1, 1, 1 end,
+    texturedata = function(_, ax, _, n) return string.rep(string.char(ax % 256), n) end,
+  }
+end
+handlers.browser.message("xpdrops")
+handlers.mouse({ button = function() return 3 end, ctrl = function() return false end,
+  shift = function() return false end, alt = function() return false end, xy = function() return 900, 300 end })
+for i = 1, 6 do
+  local images = { { ax = 40, x = 910, y = 310 - i * 3 } }
+  if i >= 4 then images[2] = { ax = 60, x = 930, y = 320 } end
+  handlers.r2d(xpEvent(images))
+  handlers.swap()
+end
+clock = clock + 25e6
+handlers.swap()
+print("xpprobe.log:")
+for line in (files["xpprobe.log"] or "<none>"):gmatch("[^\n]+") do print("  " .. line:sub(1, 130)) end
+handlers.browser.message("clickprobe")
+handlers.motion({ xy = function() return 700, 400 end })
+handlers.mouse({ button = function() return 1 end, xy = function() return 700, 400 end })
+for i = 1, 3 do
+  handlers.r2d(xpEvent({ { ax = 80, x = 702, y = 398 } }))
+  handlers.swap()
+end
+clock = clock + 20e6
+handlers.swap()
+local clickLog = files["clickprobe.log"] or ""
+print("click probe: click and the new image at it recorded, then finished:", clickLog:find("left click at 700,400") ~= nil,
+  clickLog:find("at 702,398") ~= nil, clickLog:find("probe finished") ~= nil)
+local xpdrops = require("game.xpdrops")
+local plusEvent = function(y)
+  return {
+    verticesperimage = function() return 6 end,
+    vertexcount = function() return 12 end,
+    vertexatlasdetails = function(_, i) return (i <= 6) and 70 or 71, 600, 8, 9 end,
+    vertexscaledxy = function(_, i) return (i <= 6) and 940 or 941, y end,
+    vertexcolour = function(_, i) if i <= 6 then return 0xf5 / 255, 0xb2 / 255, 0x41 / 255, 1 end return 0, 0, 0, 1 end,
+    texturedata = function(_, ax, _, n) return string.rep(string.char(70), n) end,
+  }
+end
+xpdrops.PLUS_HASH = require("game.lootprobe").pixelHash(plusEvent(0), 70, 600, 8, 9)
+local xpBefore = select(2, (files["ticks.log"] or ""):gsub("xp: ", ""))
+for i = 1, 40 do
+  handlers.r2d(plusEvent(292 - (i % 36)))
+  handlers.swap()
+end
+clock = clock + 3e6
+handlers.swap()
+print("xp drops sent to the tick clock:", select(2, (files["ticks.log"] or ""):gsub("xp: ", "")) - xpBefore)
+local minimapFrame = function(angle)
+  local px, _, pz = playerPos[1], playerPos[2], playerPos[3]
+  handlers.minimapTerrain({ angle = function() return angle end, scale = function() return 1.5 end,
+    position = function() return px, pz end })
+  handlers.renderMinimap({ targetxywh = function() return 1700, 60, 200, 200 end, sourcexywh = function() return 0, 0, 256, 256 end })
+end
+drawnLines = 0
+handlers.swap()
+local withoutMinimap = drawnLines
+drawnLines = 0
+minimapFrame(0)
+handlers.swap()
+print("minimap dots drawn for loot left nearby:", (drawnLines - withoutMinimap) / 6, "dots")
+local loot = drawnLines - withoutMinimap
+local heightBefore = playerPos[2]
+playerPos[2] = 0
+local gx, gz = math.floor(playerPos[1] / 512) + 3, math.floor(playerPos[3] / 512)
+handlers.r3d(modelEvent(6144, 77, gx, gz, false))
+handlers.swap()
+drawnLines = 0
+handlers.r3d(modelEvent(6144, 77, gx, gz, false))
+minimapFrame(0)
+handlers.swap()
+local withGhost = drawnLines
+drawnLines = 0
+handlers.r3d(modelEvent(6144, 77, gx, gz, false))
+handlers.swap()
+print("minimap ghost icon on the same floor, loot on another floor hidden (edge and fill diamonds, 6 vertices each = 12):",
+  withGhost - drawnLines)
+playerPos[2] = heightBefore
+local mm = require("game.minimap")
+mm.terrain({ angle = function() return 0 end, scale = function() return 1 end, position = function() return 0, 0 end })
+mm.render({ targetxywh = function() return 0, 0, 200, 200 end, sourcexywh = function() return 0, 0, 200, 200 end })
+local ex, ey = mm.project(512 * 5, 0)
+local nx, ny = mm.project(0, 512 * 5)
+print("5 tiles east / north on an upright minimap:", string.format("(%d,%d) (%d,%d)", ex, ey, nx, ny))
+local tickLines, shown = 0, 0
+for line in (files["ticks.log"] or ""):gmatch("[^\n]+") do
+  tickLines = tickLines + 1
+  if shown < 6 and (line:find("popup") or line:find("xp:") or line:find("summary")) then
+    shown = shown + 1
+    print("ticks.log: " .. line:sub(1, 120))
+  end
+end
+print("ticks.log lines:", tickLines)
 print("errors:", files["error.log"])

@@ -18,6 +18,7 @@ local COLOURS = {
 }
 local LOCKED_COLOUR = { 150, 150, 150 }
 COLOURS.selected = { 60, 255, 90 }
+M.COLOURS = COLOURS
 
 local pipQuads = function(quads, outline, progress, rgb)
   for _, p in ipairs(pips.layout(outline, progress.done, progress.total)) do

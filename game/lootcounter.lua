@@ -22,6 +22,18 @@ local bagSignature = nil
 local tracker, pairing, reconciler = lootpopups.newTracker(), lootpopups.newPairing(), tooltip.newReconciler()
 local mouse, playerScreen, lastIcons = nil, nil, {}
 local bagIcon, bagHovered = nil, false
+local QUIET_MICROSECONDS = 10 * 1000 * 1000
+local quietUntil, wasInRun = 0, false
+
+local onPopupAppear = function() end
+
+function M.onPopupAppear(listener)
+  onPopupAppear = listener
+end
+
+function M.loggedIn(now)
+  quietUntil = now + QUIET_MICROSECONDS
+end
 
 function M.init(boltApi, currentRun, save)
   bolt, run, saveRun = boltApi, currentRun, save
@@ -65,9 +77,10 @@ function M.lastActionAt()
   return lastActionAt
 end
 
-function M.caught()
-  M.append(string.format("caught: -%d, bag %d", runstate.CATCH_LOSS,
-    runstate.addLoot(run, -runstate.CATCH_LOSS, run.section)))
+function M.caught(wrongStep)
+  local loss = runstate.lossFor(wrongStep)
+  M.append(string.format("%s: -%d, bag %d", wrongStep and "wrong step off the maze path" or "caught", loss,
+    runstate.addLoot(run, -loss, run.section)))
   saveRun()
 end
 
@@ -82,12 +95,19 @@ function M.updatePlayerScreen(viewProj)
   playerScreen = { x = sx + vx, y = sy + vy }
 end
 
+local extraGlyphs = function() return false end
+
+function M.alsoWantGlyph(wanted)
+  extraGlyphs = wanted
+end
+
 M.want = {
   image = function(x, y)
     return playerScreen ~= nil and popups.inside(popups.PLAYER_BOX, playerScreen.x, playerScreen.y, x, y)
   end,
   glyph = function(x, y, colour)
-    return bagHovered and colour == tooltip.COLOUR and popups.inside(popups.MOUSE_BOX, mouse.x, mouse.y, x, y)
+    return (bagHovered and colour == tooltip.COLOUR and popups.inside(popups.MOUSE_BOX, mouse.x, mouse.y, x, y))
+      or extraGlyphs(x, y, colour)
   end,
   known = function(hash)
     return popupFont[hash] ~= nil or tooltipFont[hash] ~= nil
@@ -124,7 +144,8 @@ local count = function(images, now)
       near[#near + 1] = image
     end
   end
-  local ready, unreadable = lootpopups.update(tracker, now, lootpopups.lines(popupGlyphs(near), popupFont))
+  local ready, unreadable, appeared = lootpopups.update(tracker, now, lootpopups.lines(popupGlyphs(near), popupFont))
+  if appeared > 0 then onPopupAppear(now) end
   for _, item in ipairs(ready) do
     lootpopups.popup(pairing, item.at, item.value)
   end
@@ -145,7 +166,7 @@ end
 
 local reconcile = function(glyphs)
   local value = nil
-  if bagHovered then
+  if bagHovered and bolt.time() >= quietUntil then
     local near = {}
     for _, g in ipairs(glyphs) do
       if g.pixels and g.colour == tooltip.COLOUR and popups.inside(popups.MOUSE_BOX, mouse.x, mouse.y, g.x, g.y) then
@@ -182,6 +203,8 @@ function M.frame(icons, glyphs, images, knownIcons, inRun)
     if icon.signature == bagSignature then bagIcon = icon end
   end
   bagHovered = mouseOverBag()
+  if inRun and not wasInRun then quietUntil = math.max(quietUntil, bolt.time() + QUIET_MICROSECONDS) end
+  wasInRun = inRun
   if not inRun then return end
   logUnknownBitmaps(glyphs, images)
   count(images, bolt.time())

@@ -32,10 +32,11 @@ A small panel sits over the game. Drag it by its title bar, and collapse it to a
 - **Vault:** the same counts for the whole vault, and the loot split by section: gained against available for sections 1–4 (only what your level toggles allow). The section block's title shows the same for your section.
 - **⚙ Your levels:** **Thieving 102+** (safes) and **Agility 72+** (crevices), both on by default and saved to `levels.csv`. Turning one off removes what it gates from the counts and from the outlines in game.
 - Linked shadow anchors are outlined in teal until their linked object changes, which marks them powered. Anchors without a link (anchor 6) are outlined too, and marked powered when the battery stack's number changes while you're within 3 tiles of them. Pick the battery once in dev (**Pick battery**, then middle-click the batteries in your inventory, saved to `battery.csv`). Without a pick, it's learned the first time a linked anchor is powered. Bolt only sees what the game draws, so this works best with the inventory visible. Without it: if the battery count has gone down when the inventory is next drawn, the anchors you stood next to while it was hidden are marked; and clicking an anchor, then standing next to it for 3 seconds without the batteries in view, marks it too (a failed attempt would be marked as well). For linked anchors, the battery check is a fallback, since their links work without the inventory.
-- **Maze route** (turn it on in ⚙): when you click a shadow crystal, the lit path through the centre room is read from 4 screen captures over the next few seconds, matched against the maze's three known shapes, and once you're in the maze, the fastest route from your tile to the next room is drawn on the floor: filled tiles to click, 2 per running tick, the next one bright green and the rest blue, joined by a green line. It only shows while the game shows the path. The rows flush against each barrier are always safe, so the route can use them.
+- **Ghost vision tiles** (on by default, in ⚙): each ghost's vision ring is outlined as the tiles it covers, around its true tile: red when the plugin knows that tile (a patrol synced to its route, or a static rummage spawn), amber while it's estimated (a patrol not synced yet), since detection works on tiles, not the drawn circle. For now it's the tiles whose centre is within the ring's radius less half a tile, around the tile the ring is on; walls aren't taken into account yet. Every "You have been caught" logs the nearby rings, your tile and whether you were inside those tiles, to check the rule.
+- **Maze route** (turn it on in ⚙): when you click a shadow crystal, the lit path through the centre room is read from screen captures over the next few seconds (until it's recognised, turning the camera is fine), matched against the maze's three known shapes, and once you're in the maze, the fastest route from your tile to the next room is drawn on the floor: the tiles to click, 2 per running tick, the next one bright green with a thick border and the rest blue with a thin border, joined by a thin green line underneath. For the last step the barrier itself is highlighted, since that's what you click. Clicking the next tile, any later one, or the barrier moves the highlight on at the game tick your character actually moves there: right away when you set off from standing, or at the next tick when you click ahead while running. Landing on a route tile also moves it on. It only shows while the game shows the path. The rows flush against each barrier are always safe, so the route can use them.
 - **Loot bag counter:** the bag's point total is drawn over the loot bag in your inventory and shown in the panel (**Loot N/500**). It comes from the game's "N Loot Gained" popups, each paired with a loot action that could produce that value (a corpse rummage, or a chest, safe or rare chest opening), minus 20 per catch, and hovering the bag corrects it from the tooltip's "Loot Stored: N". Popups with digits the plugin hasn't learned yet (4, 7, 8, 9) are skipped and logged.
 - The panel's height fits its content exactly: every row is always shown, with **–** until there's a value.
-- **dev** shows developer tools:
+- **dev** shows developer tools. The button only appears after ticking **Developer tools** in ⚙. Each group of tools folds open from its heading and stays as you left it:
   - **Tag object**, then middle-click an object (no modifier keys) to tag it
   - **Mark tile** and **Log tile**
   - **Section checkpoints:** one button per barrier side (legionary: section 1 and 2 sides; praetorian: section 3 and 4 sides). Stand 1–2 tiles from the barrier on that side and press it. Saved to `checkpoints.csv`. **Loot with a section** shows how many loot objects have one.
@@ -100,6 +101,7 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `data/mazeshapes.lua` | The three maze shapes from the wiki, and how each leg's frame maps onto the room |
 | `ui/capture.html` | Hidden 1×1 page that reads the maze's lit tiles from screen captures |
 | `core/maze.lua` | Barrier rows, lit-tile memory while the path shows, and the fastest running route |
+| `game/visionrings.lua` | Finds ghosts' vision rings each frame, learns their size once, draws the tiles they cover and logs catches next to them |
 | `game/mazeroute.lua` | Maze route in game: barrier row mapping, screen capture on in section 4, route and its drawing |
 | `data/maze.lua` | Bundled barrier rows |
 | `game/mazegrid.lua` | Screen positions of the tile corners around the maze, saved with each screen capture |
@@ -112,6 +114,31 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `gfx/area.lua` | Draws the Watch object area on the ground |
 | `core/json.lua` | Minimal JSON encoder for panel status messages |
 | `core/status.lua` | Builds the panel's status: what's left in your section and the vault, progress, object mapping coverage |
+| `core/visionring.lua` | A vision ring's size as tiles: the covered tile mask, its outline edges, and whether a tile is covered |
+| `core/ghosttrack.lua` | Follows each vision ring from frame to frame and turns its movement into events: appears, onto a tile, starts, stops, lost |
+| `core/ghostroutes.lua` | The permanent route file: moves and stops in whole ticks with how often each was seen, built from `core/ghosttrack.lua`'s events |
+| `core/tickphase.lua` | The shared tick clock: where 0.6 s ticks fall on our clock, set by its primary source (XP drops) over the last 2 minutes and left running between them (following the tick's slow drift), with other sources as a fallback and re-locking when samples stop agreeing |
+| `game/minimap.lua` | Draws dots (loot) and diamonds (ghosts) on the minimap at world tiles: its screen place, rotation and zoom from Bolt's minimap events |
+| `game/xpdrops.lua` | Spots XP drops appearing (their orange "+") and feeds the tick clock |
+| `game/xpprobe.lua` | Dev probe: records interface images appearing near a middle-clicked spot for 20 s (following each as it moves), with their distance from the tick clock, to `xpprobe.log` |
+| `game/imageprobe.lua` | Shared by the dev probes: records interface images newly drawn near a point, with bitmaps and distance from the tick |
+| `game/clickprobe.lua` | Dev probe: for 15 s (or until pressed again) records the images around the mouse and every click to `clickprobe.log`, to learn the click cross and mouseover text |
+| `core/clicktarget.lua` | Tells what a click was on: the click cross at it (interact or walk) and the mouseover text under the cursor |
+| `game/clicks.lua` | Feeds `clicktarget` from the screen and reports interaction clicks (used to start the maze from a crystal click) |
+| `data/clicktargets.lua` | Pixel hashes of the click crosses and of known names in the mouseover text ("Shadow crystal") |
+| `game/ticksync.lua` | Feeds the tick clock from XP drops, with ghosts' movement starts and yours as the fallback (corrected for how late each is seen), measures chat lines and loot popups against it, and writes `ticks.log` |
+| `core/routeassembly.lua` | Stitches ghost sightings into routes by overlapping tile sequences and closes them into loops |
+| `core/ghostpaths.lua` | The patrol loops as per-tick timelines: finds a ghost's loop and step from its last few tiles, and the tile it's on at any tick |
+| `core/ghostsync.lua` | Keeps each loop synced to the tick clock from ghosts reaching tiles, picks ghosts back up from their synced lap, corrects a sync that walking shows is a whole tick off, and places the outline one tile ahead of the drawn ghost |
+| `data/ghostspawns.lua` | The fixed tile each corpse's rummage ghost spawns on |
+| `data/ghostpaths.lua` | The four patrol loops: tiles, heights and stalls, written by `tools/ghostroutes.lua` |
+| `core/latency.lua` | Your round trip, narrowed from standing clicks that only just made or only just missed a tick |
+| `core/truetile.lua` | Your server-side tile in the maze: each click kept with when it reaches the server, stepped two tiles a tick towards the latest one that has |
+| `core/spawntimer.lua` | Ticks left for a ghost spawned by rummaging a corpse (they last 12), as a bar of 12 cells over its head |
+| `core/lobby.lua` | The entrance area where the panel stays open with the run stats: two marked corners, or a radius round a default tile |
+| `game/entrance.lua` | Marks the entrance area by clicking its corner tiles (dev panel), saves it, and outlines it on the ground |
+| `core/runlog.lua` | The run log (`runs.csv`): completion time and loot per run, and session and lifetime stats |
+| `core/tickclock.lua` | Game tick timing from when your character starts moving (600 ms ticks), so the maze route can move on at the tick after a click |
 | `game/panel.lua` | Opens the panel or tab, remembers its position, passes button presses to their actions |
 | `ui/panel.html`, `ui/tab.html` | The panel and its collapsed tab |
 | `core/pips.lua` | Layout of the rummage-progress pips |
@@ -125,7 +152,7 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `core/markerdata.lua` | Turns a mapping CSV into markers relative to the arrival tile; nearby-marker lookup |
 | `data/markers.lua` | **Generated** marker data. Don't edit by hand |
 | `gfx/lines.lua` | Shader-based line and quad drawing (adapted from bolt-groundmarkers, see `THIRD_PARTY.md`) |
-| `game/chatlog.lua` | Finds the chat box by its speech-bubble icon and passes new lines on |
+| `game/chatlog.lua` | Finds the chat box by its speech-bubble icon and passes new lines on, and notices when chat is scrolled up or missing |
 | `modules/chat/` | Vendored bolt-chatmodule, which reads chat text (public domain, see `THIRD_PARTY.md`) |
 | `gfx/markers.lua` | Projects markers onto the game view and draws them |
 | `tools/build_markers.lua` | Regenerates `data/markers.lua` from a mapping CSV |

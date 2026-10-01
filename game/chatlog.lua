@@ -7,9 +7,16 @@ local BUBBLE_ROW_PIXELS =
   "\xc4\xd0\xcd\xff\xc4\xd0\xcd\xff\xc4\xd0\xcd\xff\xc4\xd0\xcd\xff" ..
   "\x9f\xd9\xce\xff\x9f\xd9\xce\xff\x00\x00\x01\xff"
 local RECHECK_MICROSECONDS = 500 * 1000
+local UNREAD_MICROSECONDS = 5 * 1000 * 1000
 
 function M.new(chatModule)
-  return { chat = chatModule, mostRecent = nil, nextCheck = 0, scrolled = false, primed = false }
+  return { chat = chatModule, mostRecent = nil, nextCheck = 0, scrolled = false, primed = false, readAt = nil, since = nil }
+end
+
+function M.problem(reader, now)
+  reader.since = reader.since or now
+  if now - (reader.readAt or reader.since) <= UNREAD_MICROSECONDS then return nil end
+  return reader.scrolled and "scrolled" or "missing"
 end
 
 function M.findBubble(event)
@@ -38,6 +45,7 @@ function M.read(reader, now, event, onMessage)
     reader.primed = true
     reader.scrolled = isScrolled and true or false
     reader.nextCheck = now + RECHECK_MICROSECONDS
+    if not isScrolled then reader.readAt = now end
   end
 end
 

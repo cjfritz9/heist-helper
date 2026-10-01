@@ -6,6 +6,11 @@ M.LOOT_PREFIX = "Youloot"
 M.RUMMAGES_PER_CORPSE = 5
 M.CAUGHT = "Youhavebeencaught...Youlosesomeloot."
 M.CATCH_LOSS = 20
+M.WRONG_STEP_LOSS = 5
+
+function M.lossFor(wrongStep)
+  return wrongStep and M.WRONG_STEP_LOSS or M.CATCH_LOSS
+end
 
 local CORPSE_REACH_TILES = 3
 
@@ -35,10 +40,17 @@ function M.resetRun(state)
   state.section = 1
   state.loot = 0
   state.sectionLoot = {}
+  state.corrections = {}
   state.lootedCorpses = {}
   state.rummages = {}
   state.lootedObjects = {}
   state.poweredAnchors = {}
+end
+
+function M.inProgress(state)
+  return (state.loot or 0) > 0 or (state.section or 1) > 1 or next(state.sectionLoot) ~= nil
+    or next(state.lootedCorpses) ~= nil or next(state.rummages) ~= nil or next(state.lootedObjects) ~= nil
+    or next(state.poweredAnchors) ~= nil
 end
 
 function M.addLoot(state, amount, section)
@@ -51,7 +63,20 @@ function M.addLoot(state, amount, section)
 end
 
 function M.setLoot(state, total, section)
-  return M.addLoot(state, total - (state.loot or 0), section)
+  local change = total - (state.loot or 0)
+  state.corrections = state.corrections or {}
+  while change < 0 and #state.corrections > 0 do
+    local last = state.corrections[#state.corrections]
+    local undo = math.min(last.amount, -change)
+    M.addLoot(state, -undo, last.section)
+    last.amount, change = last.amount - undo, change + undo
+    if last.amount == 0 then table.remove(state.corrections) end
+  end
+  local before = state.loot or 0
+  M.addLoot(state, change, section)
+  local added = state.loot - before
+  if added > 0 then state.corrections[#state.corrections + 1] = { section = section, amount = added } end
+  return state.loot
 end
 
 function M.setSection(state, section)

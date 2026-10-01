@@ -37,6 +37,13 @@ function T.pylon_glare_does_not_stop_a_match()
   assert.eq(best and library["west-north"][best].name, "A", why)
 end
 
+function T.four_tiles_of_one_shape_are_enough()
+  local best, why = mazepatterns.match(library["west-north"], tiles("-11,-77 -10,-77 -9,-77 -8,-77 0,-79 1,-81"), WEST_ROW)
+  assert.eq(best and library["west-north"][best].name, "A", why)
+  best = mazepatterns.match(library["west-north"], tiles("-11,-77 -10,-77 -9,-77 0,-79"), WEST_ROW)
+  assert.eq(best, nil, "three is not")
+end
+
 function T.too_little_seen()
   local best, why = mazepatterns.match(library["west-north"], tiles("-11,-77 -10,-77"), WEST_ROW)
   assert.eq(best, nil, "two tiles")
@@ -55,6 +62,17 @@ function T.every_shape_starts_next_to_its_start_row_and_ends_on_its_end_row()
       assert.eq(route ~= nil, true, leg .. " shape " .. p.name .. " has a route")
     end
   end
+end
+
+function T.corners_keep_the_in_between_tile_on_the_path()
+  local maze = require("core.maze")
+  local rows = {}
+  for n, p in pairs(require("data.maze").rows) do rows[n] = maze.row(p[1], p[2]) end
+  local route = maze.route({ lit = library["west-north"][1].tiles }, rows, -12, -73, "west", "north")
+  local out = {}
+  for i, t in ipairs(route) do out[i] = t.dx .. "," .. t.dz end
+  assert.eq(table.concat(out, " "), "-12,-75 -10,-77 -8,-75 -8,-73 -8,-71 -6,-70 -4,-70 -3,-70",
+    "diagonal round the first corner, the 2-and-1 move where its in-between tile is on the path, and out at the nearest end-row tile")
 end
 
 function T.timeline_counts_shape_tiles_per_frame()

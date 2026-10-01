@@ -1,6 +1,6 @@
 # Session tracking and lobby mode
 
-The design report's run log (F6), plus a panel near the entrance to show it. Not started.
+The design report's run log (F6), plus a panel near the entrance to show it. Started 2026-09-29: `runs.csv` records completion time and loot per run, and the panel shows runs this session and in total plus the session's average and best time. Lobby mode started 2026-09-30: the panel stays open in the entrance area with the last run and the run stats. The area is two corner tiles clicked in the game view from the dev panel (**Entrance area**, saved to `entrance.csv`); the user marked it (2487–2495, 7577–7584) and that rectangle is now the bundled default in `core/lobby.lua`. Next: gp, uniques and pilfer points per run, and what was left per section in the last-run summary.
 
 ## Goal
 
@@ -27,7 +27,7 @@ Saved to a runtime file (e.g. `runs.csv`), never the repo.
 
 ## Lobby mode
 
-- The entrance is at a fixed world position (unlike the vault instance). `positions.csv` has a logged tile at 3297, 3184 (floor 1) that's probably the entrance area. Confirm with **Log tile** there.
+- The entrance is at a fixed world position (unlike the vault instance). The entrance area is tiles 2487–2495, 7577–7584, marked in game (the earlier guess of 3297, 3184 was Al Kharid).
 - Within X tiles of it: show the panel with the summary and ⚙ levels. Keep outlines, object scanning, chat reading and the battery check off.
 
 ## Open questions

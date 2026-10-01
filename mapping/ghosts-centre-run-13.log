@@ -1,0 +1,109 @@
+[41432.802] run: arrival at 10723,2859, tiles below are relative to it
+[41432.860] g1 appears on 5,3 (5.50,3.50) height 4933
+[41432.860] g2 appears on 8,-12 (8.50,-11.51) height 2702
+[41432.873] g2 starts moving from 8,-12 (8.50,-11.52) height 2703 after standing 0.01 s
+[41432.955] g3 appears on 9,-19 (9.50,-18.50) height 2949
+[41433.593] g2 onto 8,-13 (8.50,-12.51) height 2757
+[41434.227] g2 onto 8,-14 (8.50,-13.50) height 2805
+[41434.922] g2 onto 8,-15 (8.50,-14.50) height 2877
+[41435.629] g2 onto 8,-16 (8.50,-15.49) height 2932
+[41436.335] g2 onto 8,-17 (8.50,-16.47) height 2949
+[41436.965] g2 onto 8,-18 (8.50,-17.50) height 2949
+[41437.602] g2 onto 8,-19 (8.50,-18.50) height 2949
+[41437.866] g1 treated as a spawn: hasn't moved since appearing 5 s ago
+[41437.967] g3 treated as a spawn: hasn't moved since appearing 5 s ago
+[41438.228] g4 appears on 18,2 (18.50,2.50) height 4933
+[41438.321] g2 onto 8,-20 (8.50,-19.50) height 2949
+[41438.879] g2 onto 8,-21 (8.50,-20.50) height 2949
+[41438.936] g5 appears on -24,-28 (-23.50,-27.56) height 261
+[41438.950] g5 starts moving from -24,-28 (-23.50,-27.61) height 261 after standing 0.01 s
+[41439.010] g6 appears on -24,-54 (-23.50,-53.32) height 501
+[41439.027] g6 starts moving from -24,-54 (-23.50,-53.29) height 490 after standing 0.02 s
+[41439.533] g6 onto -24,-53 (-23.50,-52.52) height 328
+[41439.533] g5 onto -24,-29 (-23.50,-28.48) height 261
+[41439.533] g2 onto 8,-22 (8.50,-21.48) height 2949
+[41439.944] g2 onto 8,-23 (8.50,-22.20) height 2949
+[41439.944] g6 onto -24,-52 (-23.50,-51.80) height 261
+[41440.351] g5 onto -24,-30 (-23.50,-29.50) height 261
+[41440.292] g5 stops on -24,-30 (-23.50,-29.50) height 261 after moving 1.34 s
+[41440.775] g2 onto 8,-24 (8.50,-23.49) height 2949
+[41440.775] g6 onto -24,-51 (-23.50,-50.51) height 261
+[41440.816] g6 lost from view on -24,-51 (-23.50,-50.43) height 261
+[41440.881] g2 lost from view on 8,-24 (8.50,-23.70) height 2949
+[41440.921] g3 lost from view on 9,-19 (9.50,-18.50) height 2949
+[41440.921] g5 lost from view on -24,-30 (-23.50,-29.50) height 261
+[41443.230] g4 treated as a spawn: hasn't moved since appearing 5 s ago
+[41444.134] g7 appears on -24,-27 (-23.50,-26.09) height 261
+[41444.144] g7 starts moving from -24,-27 (-23.50,-26.00) height 261 after standing 0.01 s
+[41444.509] g7 onto -24,-26 (-23.50,-25.50) height 261
+[41445.219] g7 onto -24,-25 (-23.50,-24.50) height 261
+[41445.925] g7 onto -24,-24 (-23.50,-23.50) height 261
+[41446.559] g7 onto -24,-23 (-23.50,-22.50) height 261
+[41447.208] g7 onto -24,-22 (-23.50,-21.50) height 261
+[41448.027] g7 onto -24,-21 (-23.50,-20.50) height 261
+[41447.998] g7 stops on -24,-21 (-23.50,-20.50) height 261 after moving 3.85 s
+[41449.258] g8 appears on 9,-19 (9.50,-18.50) height 2949
+[41448.621] g7 lost from view on -24,-21 (-23.50,-20.50) height 261
+[41450.676] g9 appears on -19,-43 (-18.39,-42.50) height 261
+[41450.685] g9 starts moving from -19,-43 (-18.38,-42.50) height 261 after standing 0.01 s
+[41451.294] g9 onto -18,-43 (-17.50,-42.50) height 261
+[41450.485] g1 lost from view on 5,3 (5.50,3.50) height 4933
+[41451.957] g9 onto -17,-43 (-16.50,-42.50) height 261
+[41452.596] g9 onto -16,-43 (-15.49,-42.50) height 261
+[41453.008] g10 appears on 2,-33 (2.08,-32.50) height 2949
+[41453.017] g10 starts moving from 2,-33 (2.09,-32.50) height 2949 after standing 0.01 s
+[41453.233] g9 onto -15,-43 (-14.50,-42.50) height 261
+[41453.989] g10 onto 3,-33 (3.51,-32.50) height 2949
+[41454.027] g9 onto -14,-43 (-13.50,-42.50) height 261
+[41454.012] g9 stops on -14,-43 (-13.50,-42.50) height 261 after moving 3.33 s
+[41454.258] g8 treated as a spawn: hasn't moved since appearing 5 s ago
+[41454.630] g10 onto 4,-33 (4.50,-32.50) height 2949
+[41454.940] g9 starts moving from -14,-43 (-13.50,-42.50) height 261 after standing 0.93 s
+[41454.940] g9 synced to section 3 south (set off), the next will confirm it
+[41455.318] g10 onto 5,-33 (5.50,-32.50) height 2949
+[41455.684] g11 appears on 5,3 (5.50,3.50) height 4933
+[41455.749] g9 onto -15,-43 (-14.50,-42.50) height 261
+[41456.030] g10 onto 6,-33 (6.51,-32.50) height 2949
+[41456.385] g9 onto -16,-43 (-15.50,-42.50) height 261
+[41456.726] g10 onto 7,-33 (7.50,-32.50) height 2949
+[41457.035] g9 onto -17,-43 (-16.53,-42.50) height 261
+[41457.488] g10 onto 8,-33 (8.41,-32.42) height 2949
+[41457.726] g9 onto -18,-43 (-17.50,-42.50) height 261
+[41458.144] g10 onto 8,-32 (8.50,-31.48) height 2949
+[41458.423] g9 onto -19,-43 (-18.50,-42.50) height 261
+[41458.785] g10 onto 8,-31 (8.50,-30.48) height 2949
+[41459.131] g9 onto -20,-43 (-19.51,-42.50) height 261
+[41459.419] g10 onto 8,-30 (8.50,-29.49) height 2949
+[41459.773] g9 onto -21,-43 (-20.50,-42.50) height 261
+[41460.120] g10 onto 8,-29 (8.50,-28.51) height 2949
+[41460.413] g9 onto -22,-43 (-21.50,-42.50) height 261
+[41460.691] g11 treated as a spawn: hasn't moved since appearing 5 s ago
+[41460.838] g10 onto 8,-28 (8.50,-27.49) height 2949
+[41461.044] g9 onto -23,-43 (-22.50,-42.50) height 261
+[41461.522] g10 onto 8,-27 (8.50,-26.50) height 2949
+[41461.762] g9 onto -24,-43 (-23.39,-42.39) height 261
+[41462.185] g10 onto 8,-26 (8.50,-25.47) height 2949
+[41462.407] g9 onto -24,-42 (-23.50,-41.52) height 261
+[41463.021] g10 onto 8,-25 (8.50,-24.50) height 2949
+[41463.117] g9 onto -24,-41 (-23.50,-40.49) height 261
+[41462.995] g10 stops on 8,-25 (8.50,-24.50) height 2949 after moving 9.98 s
+[41463.349] g10 starts moving from 8,-25 (8.51,-24.50) height 2949 after standing 0.35 s
+[41463.349] g10 synced to sections 1-2 (set off), the next will confirm it
+[41463.820] g9 onto -24,-40 (-23.50,-39.49) height 261
+[41464.143] g10 onto 9,-25 (9.50,-24.50) height 2949
+[41464.494] g9 onto -24,-39 (-23.50,-38.50) height 261
+[41464.757] g10 onto 10,-25 (10.50,-24.50) height 2949
+[41465.180] g9 onto -24,-38 (-23.50,-37.50) height 261
+[41465.470] g10 onto 11,-25 (11.50,-24.50) height 2949
+[41466.167] g10 onto 12,-25 (12.49,-24.50) height 2949
+[41465.368] g9 lost from view on -24,-38 (-23.50,-37.14) height 261
+[41466.862] g10 onto 13,-25 (13.50,-24.50) height 2949
+[41467.509] g10 onto 14,-25 (14.49,-24.50) height 2949
+[41468.177] g10 onto 15,-25 (15.51,-24.50) height 2949
+[41468.956] g10 onto 16,-25 (16.50,-24.50) height 2949
+[41468.929] g10 stops on 16,-25 (16.50,-24.50) height 2949 after moving 5.58 s
+[41471.116] g10 starts moving from 16,-25 (16.50,-24.50) height 2949 after standing 2.19 s
+[41471.116] g10 synced to sections 1-2: confirmed (set off)
+[41470.340] g11 lost from view on 5,3 (5.50,3.50) height 4933
+[41471.936] g10 onto 15,-25 (15.49,-24.50) height 2949
+[41472.517] g12 appears on 5,3 (5.50,3.50) height 4933

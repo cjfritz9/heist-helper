@@ -167,4 +167,34 @@ function T.loot_split_by_section()
   assert.eq(next(state.sectionLoot), nil, "reset")
 end
 
+function T.a_bag_reading_that_undoes_an_earlier_one_takes_it_back_from_where_it_went()
+  local state = anchored()
+  runstate.setLoot(state, 480, 1)
+  runstate.addLoot(state, 12, 1)
+  runstate.setLoot(state, 40, 2)
+  assert.eq(state.loot, 40, "the bag's total")
+  assert.eq(state.sectionLoot[1], 40, "the wrong 480 is taken back out of section 1")
+  assert.eq(state.sectionLoot[2] or 0, 0, "section 2 isn't charged for it")
+  local fresh = anchored()
+  runstate.addLoot(fresh, 15, 2)
+  runstate.setLoot(fresh, 10, 2)
+  assert.eq(fresh.sectionLoot[2], 10, "a real shortfall with nothing to take back stays where it happened")
+end
+
+function T.a_run_is_in_progress_once_anything_has_happened_in_it()
+  local state = anchored()
+  assert.eq(runstate.inProgress(state), false, "just arrived")
+  runstate.addLoot(state, 2, 1)
+  runstate.addLoot(state, -runstate.CATCH_LOSS, 1)
+  assert.eq(state.loot, 0, "caught down to nothing")
+  assert.eq(runstate.inProgress(state), true, "still a run in progress: its section split moved")
+  runstate.resetRun(state)
+  assert.eq(runstate.inProgress(state), false, "reset")
+end
+
+function T.a_wrong_step_off_the_maze_path_costs_less_than_a_catch()
+  assert.eq(runstate.lossFor(false), 20, "caught by a guard")
+  assert.eq(runstate.lossFor(true), 5, "wrong step off the maze path")
+end
+
 return T

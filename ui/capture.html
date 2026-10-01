@@ -4,7 +4,8 @@
 <body>
 <script>
   const send = (message) => fetch("https://bolt-api/send-message", { method: "POST", body: message });
-  let grid = null;
+  const MAX_VIEWS = 120;
+  let views = [];
   let frames = 0;
   window.addEventListener("error", (event) => send(`mazeinfo:page error ${event.message}`));
   send("mazeinfo:ready");
@@ -64,18 +65,24 @@
   window.addEventListener("message", (event) => {
     if (!event.data) return;
     if (event.data.type === "pluginMessage") {
-      grid = JSON.parse(new TextDecoder().decode(event.data.content));
+      const message = JSON.parse(new TextDecoder().decode(event.data.content));
+      if (message.start) views = message.grids;
+      else if (message.grid) views = [...views, message.grid].slice(-MAX_VIEWS);
       return;
     }
     if (event.data.type === "screenCapture") {
       frames++;
-      if (!grid) {
+      if (!views.length) {
         send(`mazeinfo:frame ${frames} ${event.data.width}x${event.data.height} but no grid yet`);
         return;
       }
-      const found = litTiles(event.data.width, event.data.height, event.data.content, grid);
-      if (frames <= 3 || frames % 20 === 0) {
-        send(`mazeinfo:frame ${frames} ${event.data.width}x${event.data.height}, ${found.length} lit`);
+      let found = [], best = -1;
+      views.forEach((grid, i) => {
+        const tiles = litTiles(event.data.width, event.data.height, event.data.content, grid);
+        if (tiles.length >= found.length) { found = tiles; best = i; }
+      });
+      if (frames <= 3 || frames % 20 === 0 || views.length > 2) {
+        send(`mazeinfo:frame ${frames} ${event.data.width}x${event.data.height}, ${found.length} lit, view ${best + 1} of ${views.length}`);
       }
       send(`mazelit:${found.join(";")}`);
     }

@@ -74,6 +74,37 @@ function M.isSafe(session, rows, names, dx, dz)
   return false
 end
 
+function M.stepToward(from, to, tiles)
+  local x, z = from.dx, from.dz
+  for _ = 1, tiles or M.RUN_TILES do
+    if x == to.dx and z == to.dz then break end
+    x = x + (to.dx > x and 1 or (to.dx < x and -1 or 0))
+    z = z + (to.dz > z and 1 or (to.dz < z and -1 or 0))
+  end
+  return { dx = x, dz = z }
+end
+
+function M.barrierEdge(rows, name)
+  local row, b = rows[name], M.bounds(rows)
+  if not row or not b then return nil end
+  local first, last = row[1], row[#row]
+  if first.dx == last.dx then
+    local outward = first.dx > (b.minX + b.maxX) / 2 and 1 or 0
+    local x = first.dx + outward
+    local z1, z2 = math.min(first.dz, last.dz), math.max(first.dz, last.dz) + 1
+    return { { x, z1 }, { x, z2 } }
+  end
+  local outward = first.dz > (b.minZ + b.maxZ) / 2 and 1 or 0
+  local z = first.dz + outward
+  local x1, x2 = math.min(first.dx, last.dx), math.max(first.dx, last.dx) + 1
+  return { { x1, z }, { x2, z } }
+end
+
+function M.inside(rows, dx, dz)
+  local b = M.bounds(rows)
+  return b ~= nil and dx > b.minX and dx < b.maxX and dz > b.minZ and dz < b.maxZ
+end
+
 function M.bounds(rows)
   local b = nil
   for _, tiles in pairs(rows) do
@@ -118,14 +149,39 @@ local sign = function(v)
   return v > 0 and 1 or (v < 0 and -1 or 0)
 end
 
-local COST = { tick = 1e9, walk = 1e7, offCentre = 1e5, turn = 1e2, diagonal = 1 }
+function M.pointInQuad(quad, x, y)
+  local sign = nil
+  for k = 1, 4 do
+    local a, b = quad[k], quad[k % 4 + 1]
+    local cross = (b[1] - a[1]) * (y - a[2]) - (b[2] - a[2]) * (x - a[1])
+    if cross ~= 0 then
+      local s = cross > 0
+      if sign == nil then sign = s elseif sign ~= s then return false end
+    end
+  end
+  return true
+end
 
-local moveCost = function(ox, oz, lastX, lastZ, last)
+function M.gridShift(a, b)
+  if not a or not b or a.n ~= b.n or a.dx0 ~= b.dx0 or a.dz0 ~= b.dz0 then return math.huge end
+  local shift = 0
+  for i = 1, #a.pts do
+    local p, q = a.pts[i], b.pts[i]
+    if (p < 0) ~= (q < 0) then return math.huge end
+    if p >= 0 then shift = math.max(shift, math.abs(p - q)) end
+  end
+  return shift
+end
+
+local COST = { tick = 1e9, walk = 1e7, offPathMiddle = 1e3, turn = 1e2, distance = 10, diagonal = 1 }
+
+local moveCost = function(ox, oz, lastX, lastZ, last, middleSafe)
   local cost = COST.tick
+  if not middleSafe then cost = cost + COST.offPathMiddle end
   if not last and math.max(math.abs(ox), math.abs(oz)) < M.RUN_TILES then cost = cost + COST.walk end
   if lastX and (sign(ox) ~= lastX or sign(oz) ~= lastZ) then cost = cost + COST.turn end
   if ox ~= 0 and oz ~= 0 then cost = cost + COST.diagonal end
-  return cost
+  return cost + COST.distance * math.sqrt(ox * ox + oz * oz)
 end
 
 function M.route(session, rows, fromDx, fromDz, startName, endName)
@@ -134,7 +190,6 @@ function M.route(session, rows, fromDx, fromDz, startName, endName)
   local goal = {}
   for _, t in ipairs(finish) do goal[key(t.dx, t.dz)] = true end
   if goal[key(fromDx, fromDz)] then return {} end
-  local centre = finish[math.ceil(#finish / 2)]
   local start = { dx = fromDx, dz = fromDz }
   local states = { { tile = start, cost = 0 } }
   local best, open, seen = nil, { states[1] }, {}
@@ -157,10 +212,9 @@ function M.route(session, rows, fromDx, fromDz, startName, endName)
             local tile = safe[k]
             if tile and (ox ~= 0 or oz ~= 0) then
               local last = goal[k] or false
-              local cost = here.cost + moveCost(ox, oz, here.dirX, here.dirZ, last)
-              if last and centre then
-                cost = cost + COST.offCentre * (math.abs(tile.dx - centre.dx) + math.abs(tile.dz - centre.dz))
-              end
+              local middle = math.max(math.abs(ox), math.abs(oz)) < M.RUN_TILES
+                or safe[key(here.tile.dx + sign(ox), here.tile.dz + sign(oz))] ~= nil
+              local cost = here.cost + moveCost(ox, oz, here.dirX, here.dirZ, last, middle)
               open[#open + 1] = { tile = tile, cost = cost, parent = here, dirX = sign(ox), dirZ = sign(oz) }
             end
           end

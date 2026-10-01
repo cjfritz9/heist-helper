@@ -1,6 +1,6 @@
 {
   "name": "Heist Helper",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "description": "Object outlines, loot tracking and run status for the Vault of Hereditas heist.",
   "main": "main.lua"
 }

@@ -118,4 +118,49 @@ function T.final_crystal_is_by_the_south_row()
   assert.eq(maze.nextBarrier("south"), nil, "no leg starts there")
 end
 
+function T.clicks_inside_a_projected_tile()
+  local tile = { { 100, 100 }, { 140, 110 }, { 130, 150 }, { 90, 140 } }
+  assert.eq(maze.pointInQuad(tile, 115, 125), true, "middle")
+  assert.eq(maze.pointInQuad(tile, 95, 105), false, "outside the slanted edge")
+  assert.eq(maze.pointInQuad({ tile[4], tile[3], tile[2], tile[1] }, 115, 125), true, "either winding")
+end
+
+function T.inside_the_maze_is_between_the_barrier_rows()
+  local rows = {}
+  for n, p in pairs(require("data.maze").rows) do rows[n] = maze.row(p[1], p[2]) end
+  assert.eq(maze.inside(rows, -8, -75), true, "on the west leg's path")
+  assert.eq(maze.inside(rows, -12, -75), false, "on the west barrier row")
+  assert.eq(maze.inside(rows, -14, -75), false, "in the west room")
+end
+
+function T.barrier_runs_along_the_outer_edge_of_its_row()
+  local rows = {}
+  for n, p in pairs(require("data.maze").rows) do rows[n] = maze.row(p[1], p[2]) end
+  local edge = function(name)
+    local e = maze.barrierEdge(rows, name)
+    return string.format("%g,%g %g,%g", e[1][1], e[1][2], e[2][1], e[2][2])
+  end
+  assert.eq(edge("west"), "-12,-77 -12,-72", "west edge of the west row")
+  assert.eq(edge("north"), "-3,-69 2,-69", "north edge of the north row")
+  assert.eq(edge("east"), "11,-83 11,-78", "east edge of the east row")
+  assert.eq(edge("south"), "-3,-92 2,-92", "south edge of the south row")
+end
+
+function T.true_tile_runs_two_tiles_a_tick_diagonal_first()
+  local at = function(t) return t.dx .. "," .. t.dz end
+  local target = { dx = -10, dz = -77 }
+  local first = maze.stepToward({ dx = -12, dz = -73 }, target)
+  assert.eq(at(first), "-10,-75", "first tick: two diagonal steps")
+  assert.eq(at(maze.stepToward(first, target)), "-10,-77", "second tick: straight on")
+  assert.eq(at(maze.stepToward({ dx = 0, dz = 0 }, { dx = 1, dz = 0 })), "1,0", "stops at the target")
+end
+
+function T.grid_shift_is_the_largest_corner_move()
+  local grid = function(pts) return { n = 2, dx0 = 0, dz0 = 0, pts = pts } end
+  assert.eq(maze.gridShift(grid({ 10, 10, 20, 20 }), grid({ 10, 12, 21, 20 })), 2, "moved 2 px")
+  assert.eq(maze.gridShift(grid({ 10, 10, -1, -1 }), grid({ 10, 10, -1, -1 })), 0, "off-screen corners match")
+  assert.eq(maze.gridShift(grid({ 10, 10, -1, -1 }), grid({ 10, 10, 5, 5 })), math.huge, "a corner came into view")
+  assert.eq(maze.gridShift(nil, grid({ 1, 1, 1, 1 })), math.huge, "no earlier grid")
+end
+
 return T

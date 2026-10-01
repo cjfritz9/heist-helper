@@ -1,9 +1,9 @@
 local M = {}
 
-M.NAMES = { "thieving", "agility", "maze" }
+M.NAMES = { "thieving", "agility", "maze", "ghosts", "ghostsUnseen" }
 
 function M.new()
-  return { thieving = true, agility = true, maze = false }
+  return { thieving = true, agility = true, maze = false, ghosts = true, ghostsUnseen = false }
 end
 
 function M.decode(text)

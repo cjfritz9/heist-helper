@@ -83,7 +83,7 @@ local finished = function(entry)
 end
 
 function M.update(tracker, now, lines)
-  local ready, unreadable = {}, {}
+  local ready, unreadable, appeared = {}, {}, 0
   local claimed = {}
   for _, line in ipairs(lines) do
     if M.isLootLine(line.text) then
@@ -91,6 +91,7 @@ function M.update(tracker, now, lines)
       local entry = found and tracker.lines[found]
       if not entry then
         entry = { counted = false }
+        appeared = appeared + 1
         tracker.lines[#tracker.lines + 1] = entry
         found = #tracker.lines
       end
@@ -119,7 +120,7 @@ function M.update(tracker, now, lines)
     end
   end
   tracker.lines = kept
-  return ready, unreadable
+  return ready, unreadable, appeared
 end
 
 M.VALUES = {
