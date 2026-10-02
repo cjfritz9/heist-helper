@@ -118,7 +118,10 @@ Marker edits are saved to `markers.csv` in the plugin's Bolt config folder and l
 | `core/ghosttrack.lua` | Follows each vision ring from frame to frame and turns its movement into events: appears, onto a tile, starts, stops, lost |
 | `core/ghostroutes.lua` | The permanent route file: moves and stops in whole ticks with how often each was seen, built from `core/ghosttrack.lua`'s events |
 | `core/tickphase.lua` | The shared tick clock: where 0.6 s ticks fall on our clock, set by its primary source (XP drops) over the last 2 minutes and left running between them (following the tick's slow drift), with other sources as a fallback and re-locking when samples stop agreeing |
-| `game/minimap.lua` | Draws dots (loot) and diamonds (ghosts) on the minimap at world tiles: its screen place, rotation and zoom from Bolt's minimap events |
+| `game/minimap.lua` | Draws icons for loot and ghosts on the minimap at world tiles: its screen place, rotation and zoom from Bolt's minimap events |
+| `core/minimapicons.lua` | The pixel-art minimap icons (chest, shadow chest, safe, corpse, ghost), rendered to RGBA in a kind's colour; preview of all styles in `docs/minimap-icons.png` |
+| `icons/<set>/*.png` | PNG minimap icon sets (native, digsite, spirit, mixed): `chest`, `rareChest`, `safe`, `corpse`, `ghost`, `ghostEstimate` |
+| `tools/make_icons.py` | Draws the PNG icon sets (Python with Pillow, dev only): `python3 tools/make_icons.py` |
 | `game/xpdrops.lua` | Spots XP drops appearing (their orange "+") and feeds the tick clock |
 | `game/xpprobe.lua` | Dev probe: records interface images appearing near a middle-clicked spot for 20 s (following each as it moves), with their distance from the tick clock, to `xpprobe.log` |
 | `game/imageprobe.lua` | Shared by the dev probes: records interface images newly drawn near a point, with bitmaps and distance from the tick |

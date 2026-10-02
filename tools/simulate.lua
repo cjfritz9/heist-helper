@@ -20,8 +20,9 @@ point = function(x, y, z)
     toscreen = function() return 100, 200, 0.5 end,
   }
 end
+iconsDrawn = 0
 local surface = function()
-  return { clear = function() end, drawtoscreen = function() end, setalpha = function() end }
+  return { clear = function() end, drawtoscreen = function() iconsDrawn = iconsDrawn + 1 end, setalpha = function() end }
 end
 
 local silentPages = false
@@ -34,6 +35,13 @@ local bolt = {
   time = function() return os.clock() * 1e6 end,
   createsurface = surface,
   createsurfacefromrgba = surface,
+  createsurfacefrompng = function(path)
+    local file = io.open(path:gsub("%.", "/") .. ".png", "rb")
+    if not file then return nil end
+    file:close()
+    pngsLoaded = (pngsLoaded or 0) + 1
+    return surface(), 28, 28
+  end,
   loadconfig = function(name) return files[name] end,
   saveconfig = function(name, text) files[name] = text end,
   playerposition = function() return point(playerPos[1], playerPos[2], playerPos[3]) end,
@@ -1100,29 +1108,41 @@ local minimapFrame = function(angle)
     position = function() return px, pz end })
   handlers.renderMinimap({ targetxywh = function() return 1700, 60, 200, 200 end, sourcexywh = function() return 0, 0, 256, 256 end })
 end
-drawnLines = 0
+iconsDrawn = 0
 handlers.swap()
-local withoutMinimap = drawnLines
-drawnLines = 0
+local withoutMinimap = iconsDrawn
+iconsDrawn = 0
 minimapFrame(0)
 handlers.swap()
-print("minimap dots drawn for loot left nearby:", (drawnLines - withoutMinimap) / 6, "dots")
-local loot = drawnLines - withoutMinimap
+print("minimap icons drawn for loot left nearby:", iconsDrawn - withoutMinimap)
 local heightBefore = playerPos[2]
 playerPos[2] = 0
 local gx, gz = math.floor(playerPos[1] / 512) + 3, math.floor(playerPos[3] / 512)
 handlers.r3d(modelEvent(6144, 77, gx, gz, false))
 handlers.swap()
-drawnLines = 0
+iconsDrawn, drawnLines = 0, 0
 handlers.r3d(modelEvent(6144, 77, gx, gz, false))
 minimapFrame(0)
 handlers.swap()
-local withGhost = drawnLines
-drawnLines = 0
+local withGhost, minimapLines = iconsDrawn, drawnLines
+iconsDrawn, drawnLines = 0, 0
 handlers.r3d(modelEvent(6144, 77, gx, gz, false))
 handlers.swap()
-print("minimap ghost icon on the same floor, loot on another floor hidden (edge and fill diamonds, 6 vertices each = 12):",
-  withGhost - drawnLines)
+print("minimap from another floor: the ghost and the loot on other levels all drawn:", withGhost - iconsDrawn)
+handlers.browser.message("mapicons")
+print("minimap style after one press from the default native:", require("game.minimap").style(), files["minimap.csv"])
+for _ = 1, 2 do handlers.browser.message("mapicons") end
+iconsDrawn, pngsLoaded = 0, 0
+handlers.r3d(modelEvent(6144, 77, gx, gz, false))
+minimapFrame(0)
+handlers.swap()
+print("spirit PNG set loads the ghost icon from icons/spirit:", require("game.minimap").style(), pngsLoaded, iconsDrawn)
+for _ = 1, 2 do handlers.browser.message("mapicons") end
+iconsDrawn = 0
+handlers.r3d(modelEvent(6144, 77, gx, gz, false))
+minimapFrame(0)
+handlers.swap()
+print("all five styles cycled back to native, still drawing:", require("game.minimap").style(), iconsDrawn > 0)
 playerPos[2] = heightBefore
 local mm = require("game.minimap")
 mm.terrain({ angle = function() return 0 end, scale = function() return 1 end, position = function() return 0, 0 end })

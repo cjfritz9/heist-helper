@@ -91,6 +91,7 @@
   <label class="toggle"><input type="checkbox" id="mazeToggle"> Maze route <span class="muted">(reads the screen)</span></label>
   <label class="toggle"><input type="checkbox" id="ghostsToggle"> Ghost vision tiles</label>
   <label class="toggle"><input type="checkbox" id="ghostsUnseenToggle"> Keep patrols drawn out of view <span class="muted">(off for submission)</span></label>
+  <div class="buttons"><button id="mapIcons" title="Cycle the minimap icon style">Minimap icons: –</button></div>
   <label class="toggle"><input type="checkbox" id="devToolsToggle"> Developer tools</label>
 </section>
 
@@ -228,6 +229,7 @@
   byId("mazeToggle").addEventListener("change", () => send("level:maze"));
   byId("ghostsToggle").addEventListener("change", () => send("level:ghosts"));
   byId("ghostsUnseenToggle").addEventListener("change", () => send("level:ghostsUnseen"));
+  byId("mapIcons").addEventListener("click", () => send("mapicons"));
   byId("devToolsToggle").addEventListener("change", () => send("devtools"));
   const GROUPS_KEY = "heist-helper:open-groups";
   const readOpenGroups = () => {
@@ -481,6 +483,7 @@
     byId("mazeToggle").checked = !!(s.levels && s.levels.maze);
     byId("ghostsToggle").checked = !!(s.levels && s.levels.ghosts);
     byId("ghostsUnseenToggle").checked = !!(s.levels && s.levels.ghostsUnseen);
+    byId("mapIcons").textContent = `Minimap icons: ${s.mapIcons || "native"}`;
     renderMapping(s.mapping);
     byId("mazeState").textContent = s.maze
       ? `${s.maze.capturing ? "capturing…, " : ""}${s.maze.lit} lit${s.maze.leg ? `, ${s.maze.leg}` : ""}${s.maze.known ? ", known maze" : ""}${s.maze.route != null ? `, route ${s.maze.route} ticks` : ""}`

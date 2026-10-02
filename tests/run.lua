@@ -41,6 +41,7 @@ local SUITES = {
   "tests.truetile_test",
   "tests.spawntimer_test",
   "tests.clicktarget_test",
+  "tests.minimapicons_test",
   "tests.tickphase_test",
   "tests.visionring_test",
   "tests.ghosttrack_test",

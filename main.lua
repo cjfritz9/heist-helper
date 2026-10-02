@@ -167,6 +167,10 @@ local chatProblem = function()
   end
   return problem
 end
+local extraStatus = function(status, inVaultNow)
+  status.mapIcons = minimap.style()
+  if inVaultNow then status.chat = chatProblem() end
+end
 
 local recordText = bolt.loadconfig(RECORD_FILE) or ""
 local recordDirty = false
@@ -306,15 +310,16 @@ local drawMinimap = function()
   local dots = {}
   for _, o in ipairs(status.remaining(run, objectMap, playerLevels)) do
     local rgb = objectDraw.COLOURS[o.kind]
-    if rgb then dots[#dots + 1] = { dx = o.dx, dz = o.dz, y = o.y, colour = { rgb[1], rgb[2], rgb[3], 255 } } end
+    local here = not run.section or not o.section or o.section == run.section
+    if rgb and here then dots[#dots + 1] = { dx = o.dx, dz = o.dz, y = o.y, icon = o.kind, colour = { rgb[1], rgb[2], rgb[3], 255 } } end
   end
   if playerLevels.ghosts then
     for _, g in ipairs(visionrings.minimapGhosts()) do
-      dots[#dots + 1] = { dx = g.dx, dz = g.dz, y = g.y, size = MINIMAP_GHOST_PIXELS,
+      dots[#dots + 1] = { dx = g.dx, dz = g.dz, y = g.y, size = MINIMAP_GHOST_PIXELS, icon = g.synced and "ghost" or "ghostEstimate",
         colour = g.synced and MINIMAP_GHOST_COLOUR or MINIMAP_GHOST_ESTIMATE_COLOUR }
     end
   end
-  minimap.draw(bolt, run.anchor, player.height, dots)
+  minimap.draw(bolt, run.anchor, dots)
 end
 
 local inVault = function()
@@ -711,6 +716,7 @@ local crystalSeen = function(result)
   mazeroute.trigger(result.at, best.tileX - run.anchor.x, best.tileZ - run.anchor.z)
 end
 clicks.init(crystalSeen)
+minimap.init(bolt)
 lootcounter.alsoWantGlyph(clicks.wants)
 
 local processInventory = function()
@@ -1097,6 +1103,7 @@ panel.init(bolt, {
     showFlash(complete and "added" or "tagged")
   end,
   level = toggleLevel,
+  mapicons = function() minimap.cycleStyle() end,
   link = linkCommand,
   compare = compareCommand,
   select = selectCandidate,
@@ -1231,6 +1238,7 @@ bolt.onswapbuffers(function()
     local lobbyStatus = status.build(run, objectMap, nil, playerLevels)
     lobbyStatus.lobby = true
     lobbyStatus.runs = runStats()
+    extraStatus(lobbyStatus, false)
     lobbyStatus.entrance = entrance.status()
     lobbyStatus.pickTarget = pickTarget
     guarded("panel", panel.update, bolt.time(), lobbyStatus)
@@ -1251,9 +1259,10 @@ bolt.onswapbuffers(function()
   panelStatus.maze = mazeroute.status()
   panelStatus.loot = run.loot
   panelStatus.runs = runStats()
+
   panelStatus.entrance = entrance.status()
   panelStatus.lastTag = lastTag
-  panelStatus.chat = chatProblem()
+  extraStatus(panelStatus, true)
   panelStatus.link = linkwizard.status(wizard)
   panelStatus.linkCount = #linkSet.list
   panelStatus.compare = comparisonStatus()

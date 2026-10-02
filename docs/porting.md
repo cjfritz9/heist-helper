@@ -31,6 +31,8 @@ These describe the heist itself and should carry over as they are.
 | `core/runlog.lua`, `core/lobby.lua` | Run stats and the entrance area. |
 | `core/visionring.lua`, `core/spawntimer.lua`, `data/ghostspawns.lua` | Vision ring tile mask, the 12-tick spawn timer, spawn tiles. |
 | `core/ghostpaths.lua`, `data/ghostpaths.lua` (tiles, heights, stalls) | Patrol loops as tick timelines. Still useful for predicting where a ghost goes next. |
+| `icons/`, `tools/make_icons.py` | PNG icon sets (native, digsite, spirit, mixed); the most portable form of the icons, since any API that draws images can use them. |
+| `core/minimapicons.lua` | Pixel-art icons as RGBA; usable wherever the new API can draw images. |
 | `core/coords.lua`, `core/json.lua`, `core/rollinglog.lua`, `core/chatlines.lua`, `core/nearby.lua`, `core/hull.lua`, `core/pips.lua` | General helpers. |
 
 ## Adapt: logic fed by inferred data today
